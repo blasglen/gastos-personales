@@ -1,6 +1,6 @@
 // Mis Cuentas — service worker: funciona sin internet.
 // Al publicar cambios, subí VERSION para que el celu baje los archivos nuevos.
-const VERSION = "mc-1.6.1";
+const VERSION = "mc-1.7.0";
 const CORE = ["./", "index.html", "manifest.json", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {

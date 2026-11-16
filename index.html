@@ -97,7 +97,7 @@
   .kv .l{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
   .kv .v{font-size:18px;font-weight:700;white-space:nowrap}
   .kv .v.lime{color:var(--lime)} .kv .v.coral{color:var(--coral)}
-  .kv .v.red{color:#ff5c5c} .kv .v.green{color:#3ee08f}
+  .kv .v.red{color:#ff5c5c} .kv .v.green{color:#3ee08f} .kv .v.blue{color:#5aa9ff}
   .kv .tq{border-top:1px solid var(--edge);padding-top:8px}
   .strip{display:flex;height:14px;border-radius:99px;overflow:hidden;margin-top:18px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.06) 0 6px,transparent 6px 12px);gap:2px}
   .strip i{display:block;height:100%;transition:flex-basis .4s}
@@ -262,11 +262,11 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.6.1";
+  const APP_VERSION="1.7.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
-  const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",educacion:"🎓",impuesto:"🧾",persona:"👤",deporte:"🎾",futbol:"⚽",torneo:"🏆",otro:"🧾"};
+  const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",educacion:"🎓",impuesto:"🧾",persona:"👤",deporte:"🎾",futbol:"⚽",torneo:"🏆",broker:"📈",cripto:"🪙",dolar:"💵",otro:"🧾"};
   // Fotos propias (ítems, tarjetas y grupos): guardadas en el celu como imagen chiquita
   const foto = k => state.fotos[k];
   const imgTag = src => `<img class="ficon" src="${src}" alt="">`;
@@ -297,11 +297,15 @@
   // ---------- datos ----------
   const sorted = list => list.slice().sort((a,b)=>(a.orden??99)-(b.orden??99));
   const activeItems = () => sorted(state.items.filter(i=>i.activo!==false));
-  const gastos = () => activeItems().filter(i=>i.tipo!=="ingreso");
+  const gastos = () => activeItems().filter(i=>i.tipo!=="ingreso"&&i.tipo!=="inversion");
+  const inversiones = () => activeItems().filter(i=>i.tipo==="inversion");
+  const INVPAL = ["#5aa9ff","#9b8cff","#3fd0c9","#7fb6ff","#c3a6ff"];
+  const invColor = id => INVPAL[Math.max(0,inversiones().findIndex(i=>i.id===id)) % INVPAL.length];
+  const invTotal = ym => inversiones().reduce((s,i)=>{ const m=mov(i.id,ym); return s+(m?m.importe:0); },0);
   const ingresos = () => activeItems().filter(i=>i.tipo==="ingreso");
   const mov = (itemId,ym) => state.movs[itemId+"__"+ym];
   const groupsOf = list => { const g=[]; list.forEach(i=>{ if(!g.includes(i.grupo)) g.push(i.grupo); }); return g; };
-  const color = id => { const idx = gastos().findIndex(i=>i.id===id); return PAL[(idx<0?0:idx) % PAL.length]; };
+  const color = id => { if(inversiones().some(i=>i.id===id)) return invColor(id); const idx = gastos().findIndex(i=>i.id===id); return PAL[(idx<0?0:idx) % PAL.length]; };
   function lastKnown(itemId, ym){ for(let k=1;k<=12;k++){ const m=mov(itemId, ymAdd(ym,-k)); if(m) return {ym:ymAdd(ym,-k), ...m}; } return null; }
   // Ingreso del mes: lo cargado; si no hay nada, el último ingreso conocido (marcado como estimado)
   // Ingreso del mes: cada ingreso cargado; el que falte se estima con su último importe conocido
@@ -344,7 +348,7 @@
   const seriesList = () => gastos().map(i=>({id:i.id,nombre:i.nombre,color:color(i.id),val:ym=>{ const m=mov(i.id,ym); return m?m.importe:0; }}))
     .concat(tarjetas().map(t=>({id:"card:"+t,nombre:"💳 "+t,color:cardColor(t),val:ym=>cardTotal(t,ym)})));
 
-  function spend(ym){ let g=0,c=0; gastos().forEach(i=>{ const m=mov(i.id,ym); if(m){ g+=m.importe||0; c++; } }); const q=cuotasTotal(ym); return {g:g+q,cuotas:q,c,n:gastos().length}; }
+  function spend(ym){ let g=0,c=0; gastos().forEach(i=>{ const m=mov(i.id,ym); if(m){ g+=m.importe||0; c++; } }); const q=cuotasTotal(ym); return {g:g+q,cuotas:q,inv:invTotal(ym),c,n:gastos().length}; }
 
   // ---------- mes ----------
   function renderMonths(){
@@ -370,11 +374,13 @@
         <div><div class="l">Ingreso${inc.est?" (estimado)":""}</div><div class="v num money lime">${hasInc?fmt0(inc.v):"—"}</div></div>
         <div><div class="l">Gastos${s.c<s.n?` · ${s.c}/${s.n} cargados`:""}</div><div class="v num money red">${s.g-s.cuotas>0?"− "+fmt0(s.g-s.cuotas):fmt0(0)}</div></div>
         <div><div class="l">Cuotas</div><div class="v num money red">${s.cuotas>0?"− "+fmt0(s.cuotas):fmt0(0)}</div></div>
-        <div class="tq"><div class="l">Te queda</div><div class="v num money ${hasInc&&inc.v-s.g<0?"red":"green"}">${hasInc?(inc.v-s.g<0?"− "+fmt0(s.g-inc.v):fmt0(inc.v-s.g)):"—"}</div></div>
+        ${inversiones().length?`<div><div class="l">Inversiones</div><div class="v num money blue">${s.inv>0?"− "+fmt0(s.inv):fmt0(0)}</div></div>`:""}
+        <div class="tq"><div class="l">Te queda</div><div class="v num money ${hasInc&&inc.v-s.g-s.inv<0?"red":"green"}">${hasInc?(inc.v-s.g-s.inv<0?"− "+fmt0(s.g+s.inv-inc.v):fmt0(inc.v-s.g-s.inv)):"—"}</div></div>
       </div></div>`;
     if(hasInc){
-      const segs = seriesList().map(se=>{ const v=se.val(ym); return v? `<i style="flex:0 0 ${Math.max(0,(v/Math.max(inc.v,s.g))*100)}%;background:${se.color}"></i>`:""; }).join("");
-      h+=`<div class="strip">${segs}</div><div class="strip-cap"><span>Cómo se reparte tu ingreso</span><span>${p<=100?"Libre "+pctTxt(100-p)+"%":"Te pasaste "+pctTxt(p-100)+"%"}</span></div>`;
+      const den=Math.max(inc.v,s.g+s.inv), usado=(s.g+s.inv)/inc.v*100;
+      const segs = seriesList().concat(inversiones().map(i=>({color:invColor(i.id),val:ym=>{ const m=mov(i.id,ym); return m?m.importe:0; }}))).map(se=>{ const v=se.val(ym); return v? `<i style="flex:0 0 ${Math.max(0,(v/den)*100)}%;background:${se.color}"></i>`:""; }).join("");
+      h+=`<div class="strip">${segs}</div><div class="strip-cap"><span>Cómo se reparte tu ingreso</span><span>${usado<=100?"Libre "+pctTxt(100-usado)+"%":"Te pasaste "+pctTxt(usado-100)+"%"}</span></div>`;
       if(inc.est) h+=`<div class="note">${esc(inc.estNames.join(" y "))}: todavía sin cargar este mes, uso el último importe conocido.</div>`;
     } else {
       h+=`<button class="cta" id="ctaInc">Cargar ingreso de ${MESES[Number(ym.split("-")[1])-1]}</button>`;
@@ -466,6 +472,20 @@
       });
       if(nextTot<tot) html+=`<div class="cardnote" style="margin:4px 4px 2px">El mes que viene las cuotas bajan a <b class="num money">${fmt0(nextTot)}</b>.</div>`;
       html+=`</div>`; }
+      html+=`</div>`;
+    }
+    // inversiones
+    const inv=inversiones();
+    if(inv.length){
+      const tot=invTotal(ym), iOpen=openGroups.has("inversiones"), cargadas=inv.filter(i=>mov(i.id,ym)).length;
+      html+=`<div class="sec"><h2>Inversiones</h2><span></span></div><div class="cards"><button class="xc gc ${iOpen?"open":""}" data-group="inversiones">
+        <div class="ic" style="background:rgba(90,169,255,.16)">📈</div>
+        <div style="min-width:0"><div class="nm">Inversiones del mes</div>
+          <div class="meta"><span>${cargadas}/${inv.length} cargadas</span>${tot?`<span class="num money">${fmt0(tot)}</span>`:""}</div></div>
+        <div class="pc">${hasInc&&tot?`<div class="p disp" style="color:#5aa9ff">${pctTxt(tot/inc.v*100)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
+                                 :`<div class="p disp muted">—</div><div class="s"><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`}</div>
+        <div class="track">${inv.map(i=>{ const m=mov(i.id,ym); return m?`<i style="width:${hasInc?m.importe/inc.v*100:m.importe/Math.max(tot,1)*100}%;background:${invColor(i.id)}"></i>`:""; }).join("")}</div></button>`;
+      if(iOpen) html+=`<div class="subcards">${inv.map(i=>card(i,true)).join("")}</div>`;
       html+=`</div>`;
     }
     $("#groups").innerHTML=html;
@@ -608,7 +628,7 @@
       h+=`<button class="gh" data-rengroup="${esc(g)}">${esc(g)}<span>Renombrar ›</span></button>`;
       ord.filter(i=>i.grupo===g).forEach(i=>{ h+=`<button class="row" data-edit="${esc(i.id)}" style="${i.activo===false?"opacity:.45":""}">
         <div class="ic">${itemIcon(i)}</div><div class="t"><div class="n">${esc(i.nombre)}</div>
-        <div class="s">${i.tipo==="ingreso"?"Ingreso":"Gasto"}${i.venc?" · vence día "+i.venc:""}${i.activo===false?" · archivado":""}</div></div><div class="muted">›</div></button>`; });
+        <div class="s">${i.tipo==="ingreso"?"Ingreso":i.tipo==="inversion"?"Inversión":"Gasto"}${i.venc?" · vence día "+i.venc:""}${i.activo===false?" · archivado":""}</div></div><div class="muted">›</div></button>`; });
     });
     $("#itemsList").innerHTML=h;
   }
@@ -616,12 +636,12 @@
     const i=id?state.items.find(x=>x.id===id):null;
     let tipo=i?.tipo||tipoDef||"gasto";
     const groups=groupsOf(state.items);
-    const icons={luz:"Luz",gas:"Gas",agua:"Agua",internet:"Internet",expensas:"Expensas",tsu:"Tasa municipal",impuesto:"Impuesto",celular:"Celular",educacion:"Educación",deporte:"Deporte / raqueta",futbol:"Fútbol",torneo:"Torneo",ingreso:"Ingreso",otro:"Otro"};
+    const icons={luz:"Luz",gas:"Gas",agua:"Agua",internet:"Internet",expensas:"Expensas",tsu:"Tasa municipal",impuesto:"Impuesto",celular:"Celular",educacion:"Educación",deporte:"Deporte / raqueta",futbol:"Fútbol",torneo:"Torneo",broker:"Broker",cripto:"Cripto",dolar:"Dólares",ingreso:"Ingreso",otro:"Otro"};
     const defIco = i?.icono || (tipo==="ingreso"?"ingreso":"otro");
     openSheet(`
       <h3>${i?"Editar ítem":"Nuevo ítem"}</h3>
       <div class="sub">Ponele el nombre que usás vos.</div>
-      <div class="seg" id="fTipo"><button data-t="gasto" class="${tipo==="gasto"?"on":""}">Gasto</button><button data-t="ingreso" class="${tipo==="ingreso"?"on":""}">Ingreso</button></div>
+      <div class="seg" id="fTipo"><button data-t="gasto" class="${tipo==="gasto"?"on":""}">Gasto</button><button data-t="ingreso" class="${tipo==="ingreso"?"on":""}">Ingreso</button><button data-t="inversion" class="${tipo==="inversion"?"on":""}">Inversión</button></div>
       <label class="f">Nombre</label><input class="in" id="iNom" maxlength="60" placeholder="Ej: Sueldo" value="${esc(i?.nombre||"")}">
       <label class="f">Grupo</label><input class="in" id="iGru" maxlength="40" list="glist" placeholder="Ej: Yrigoyen 3347" value="${esc(i?.grupo||(tipo==="ingreso"?"Ingresos":""))}">
       <datalist id="glist">${groups.map(g=>`<option value="${esc(g)}">`).join("")}</datalist>
@@ -639,7 +659,7 @@
     $("#iCancel").addEventListener("click",closeSheet);
     $("#iFoto")?.addEventListener("click",()=>pickPhoto("item:"+i.id, i.nombre, ICON[i.icono]||ICON.otro, ()=>openItem(id)));
     $("#iSave").addEventListener("click",async e=>{
-      const nombre=$("#iNom").value.trim(), grupo=$("#iGru").value.trim()||(tipo==="ingreso"?"Ingresos":"General");
+      const nombre=$("#iNom").value.trim(), grupo=$("#iGru").value.trim()||(tipo==="ingreso"?"Ingresos":tipo==="inversion"?"Inversiones":"General");
       if(!nombre){ $("#iNom").style.outline="2px solid var(--coral)"; return; }
       const venc=parseInt($("#iVen").value,10);
       const nid=i?.id||("it-"+Date.now().toString(36));
