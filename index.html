@@ -41,10 +41,27 @@
   .pill-btn{background:var(--glass);border:1px solid var(--edge);color:var(--ink);height:38px;min-width:38px;padding:0 10px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:inherit;font-size:14px}
   .pill-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
-  .months{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px 16px;padding:2px 16px}
-  .months::-webkit-scrollbar{display:none}
-  .months button{flex:none;background:var(--glass);border:1px solid var(--edge);color:var(--mut);border-radius:99px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer;text-transform:capitalize}
-  .months button.on{background:var(--ink);color:#0b0c10;border-color:var(--ink);font-weight:600}
+  .mnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 16px}
+  .mnav button{width:46px;height:46px;flex:none;border-radius:50%;background:var(--glass);border:1px solid var(--edge);color:var(--ink);display:grid;place-items:center;cursor:pointer}
+  .mnav button:active{background:var(--glass2)}
+  .mnav button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  .mnav .ml{text-align:center;flex:1}
+  .mnav .ml b{display:block;font-family:"Bricolage Grotesque";font-size:24px;font-weight:700;letter-spacing:-.02em;text-transform:capitalize;line-height:1.1}
+  .mnav .ml span{font-size:12.5px;color:var(--mut)}
+  .mnav .ml button.hoy{display:inline;width:auto;height:auto;border:0;background:none;color:var(--lime);font:inherit;font-size:12.5px;padding:0;border-radius:0}
+  .gc .nm{white-space:normal;line-height:1.2}
+  .gc .chev{width:18px;height:18px;stroke:var(--mut);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s;margin-left:2px;vertical-align:-3px}
+  .gc.open .chev{transform:rotate(180deg)}
+  .gc .track{display:flex;gap:2px;background:none}
+  .gc .track i{border-radius:0}
+  .gc .track i:first-child{border-radius:99px 0 0 99px}
+  .gc .track i:last-child{border-radius:0 99px 99px 0}
+  .subcards{display:grid;gap:8px;margin:2px 0 4px 14px;padding-left:12px;border-left:2px solid var(--edge);animation:fade .2s ease}
+  .subcards .xc{padding:12px 14px 13px}
+  .subcards .xc .ic{width:36px;height:36px;font-size:16px;border-radius:12px}
+  .subcards .xc .pc .p{font-size:20px}
+  button.gh{display:flex;justify-content:space-between;width:calc(100% - 8px);background:none;border:0;font:inherit;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;margin:18px 4px 8px;padding:0;cursor:pointer}
+  button.gh span{text-transform:none;letter-spacing:0;color:var(--dim)}
 
   /* hero */
   .hero{position:relative;border-radius:28px;padding:20px;background:linear-gradient(155deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid var(--edge);overflow:hidden}
@@ -175,7 +192,11 @@
   <div class="banner" id="banner"></div>
 
   <section class="view on" id="v-mes">
-    <div class="months" id="months"></div>
+    <div class="mnav">
+      <button id="mPrev" aria-label="Mes anterior"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="ml" id="mLabel"></div>
+      <button id="mNext" aria-label="Mes siguiente"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    </div>
     <div class="hero" id="hero"><div class="empty">Cargando tus cuentas…</div></div>
     <div id="incomeBox"></div>
     <div id="groups"></div>
@@ -215,7 +236,7 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.0.0";
+  const APP_VERSION="1.1.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
@@ -235,6 +256,7 @@
   const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
   const state = { mes: ymNow(), items: [], movs: {}, ready:false, db:null, base:null };
+  let openGroups=new Set(); try{ openGroups=new Set(JSON.parse(localStorage.getItem("mc.open")||"[]")); }catch(e){}
   let hide=false; try{ hide = localStorage.getItem("mc.hide")==="1"; }catch(e){}
   const applyHide = () => document.body.classList.toggle("hide", hide);
   applyHide();
@@ -263,10 +285,8 @@
 
   // ---------- mes ----------
   function renderMonths(){
-    const end = ymAdd(ymNow(),1); const arr=[]; for(let k=11;k>=0;k--) arr.push(ymAdd(end,-k));
-    if(!arr.includes(state.mes)) arr.push(state.mes);
-    $("#months").innerHTML = arr.map(ym=>`<button data-ym="${ym}" class="${ym===state.mes?"on":""}">${ymShort(ym)}</button>`).join("");
-    const on=$("#months .on"); if(on) on.scrollIntoView({inline:"center",block:"nearest"});
+    const [y,m]=state.mes.split("-").map(Number), now=ymNow();
+    $("#mLabel").innerHTML = `<b>${MESES[m-1]}</b><span>${y}${state.mes!==now?` · <button class="hoy" id="mHoy">volver a hoy</button>`:""}</span>`;
   }
   function ringSVG(p){
     const R=56, C=2*Math.PI*R, f=Math.min(p,100)/100;
@@ -307,28 +327,38 @@
     const items=gastos();
     if(!items.length){ $("#groups").innerHTML=`<div class="empty">Todavía no hay gastos. Andá a <b>Ítems</b> y creá el primero.</div>`; return; }
     const maxP = Math.max(1,...items.map(i=>{ const m=mov(i.id,ym); return m?m.importe:0; }));
-    let html="";
+    const card = (i, sub) => {
+      const m=mov(i.id,ym), col=color(i.id), lk=m?null:lastKnown(i.id,ym);
+      const pc = m&&hasInc ? m.importe/inc.v*100 : null;
+      const tag = m ? "" : `<span class="tag none">Sin cargar</span>`;
+      const amt = m ? `<span class="num money">${fmt(m.importe)}</span>` : (lk?`últ. <span class="num money">${fmt0(lk.importe)}</span>`:"");
+      const right = m ? (pc!=null? `<div class="p disp" style="color:${col}">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso</div>`
+                                  : `<div class="p disp muted" style="font-size:18px">s/ingreso</div>`)
+                      : `<div class="p disp muted">—</div>`;
+      const w = m ? (hasInc ? Math.min(100,pc) : m.importe/maxP*100) : 0;
+      return `<button class="xc ${m?"":"empty-it"}" data-item="${esc(i.id)}">
+        <div class="ic" style="background:${col}1f">${ICON[i.icono]||ICON.otro}</div>
+        <div style="min-width:0"><div class="nm">${esc(i.nombre)}</div><div class="meta">${tag}${amt}</div></div>
+        <div class="pc">${right}</div>
+        <div class="track"><i style="width:${w}%;background:${col}"></i></div></button>`;
+    };
+    let html=`<div class="sec"><h2>Gastos</h2><span></span></div><div class="cards">`;
     groupsOf(items).forEach(g=>{
       const gi=items.filter(i=>i.grupo===g);
-      let sum=0; gi.forEach(i=>{ const m=mov(i.id,ym); if(m) sum+=m.importe||0; });
-      html+=`<div class="sec"><h2>${esc(g)}</h2><span>${hasInc&&sum?`<b class="num" style="color:var(--ink)">${pctTxt(sum/inc.v*100)}%</b> · `:""}<span class="num money">${sum?fmt0(sum):""}</span></span></div><div class="cards">`;
-      gi.forEach(i=>{
-        const m=mov(i.id,ym), col=color(i.id), lk=m?null:lastKnown(i.id,ym);
-        const pc = m&&hasInc ? m.importe/inc.v*100 : null;
-        const tag = m ? "" : `<span class="tag none">Sin cargar</span>`;
-        const amt = m ? `<span class="num money">${fmt(m.importe)}</span>` : (lk?`últ. <span class="num money">${fmt0(lk.importe)}</span>`:"");
-        const right = m ? (pc!=null? `<div class="p disp" style="color:${col}">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso</div>`
-                                    : `<div class="p disp muted" style="font-size:18px">s/ingreso</div>`)
-                        : `<div class="p disp muted">—</div>`;
-        const w = m ? (hasInc ? Math.min(100,pc) : m.importe/maxP*100) : 0;
-        html+=`<button class="xc ${m?"":"empty-it"}" data-item="${esc(i.id)}">
-          <div class="ic" style="background:${col}1f">${ICON[i.icono]||ICON.otro}</div>
-          <div style="min-width:0"><div class="nm">${esc(i.nombre)}</div><div class="meta">${tag}${amt}</div></div>
-          <div class="pc">${right}</div>
-          <div class="track"><i style="width:${w}%;background:${col}"></i></div></button>`;
-      });
-      html+=`</div>`;
+      if(gi.length===1){ html+=card(gi[0]); return; }
+      let sum=0, cargados=0; gi.forEach(i=>{ const m=mov(i.id,ym); if(m){ sum+=m.importe||0; cargados++; } });
+      const isOpen=openGroups.has(g), pc = hasInc&&sum ? sum/inc.v*100 : null;
+      const segs = gi.map(i=>{ const m=mov(i.id,ym); if(!m) return ""; const w = hasInc ? m.importe/inc.v*100 : m.importe/Math.max(sum,1)*100; return `<i style="width:${w}%;background:${color(i.id)}"></i>`; }).join("");
+      html+=`<button class="xc gc ${isOpen?"open":""}" data-group="${esc(g)}">
+        <div class="ic" style="background:rgba(255,255,255,.07)">🏠</div>
+        <div style="min-width:0"><div class="nm">${esc(g)}</div>
+          <div class="meta"><span>${cargados<gi.length?`${cargados}/${gi.length} cargados`:`${gi.length} gastos`}</span>${sum?`<span class="num money">${fmt0(sum)}</span>`:""}</div></div>
+        <div class="pc">${pc!=null?`<div class="p disp">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
+                                  :`<div class="p disp muted">—</div><div class="s"><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`}</div>
+        <div class="track">${segs}</div></button>`;
+      if(isOpen) html+=`<div class="subcards">${gi.map(i=>card(i,true)).join("")}</div>`;
     });
+    html+=`</div>`;
     $("#groups").innerHTML=html;
   }
 
@@ -378,7 +408,7 @@
     if(!all.length){ $("#itemsList").innerHTML=`<div class="empty">Sin ítems todavía.</div>`; return; }
     let h=""; const ord = [...all.filter(i=>i.tipo==="ingreso"), ...all.filter(i=>i.tipo!=="ingreso")];
     groupsOf(ord).forEach(g=>{
-      h+=`<div class="gh">${esc(g)}</div>`;
+      h+=`<button class="gh" data-rengroup="${esc(g)}">${esc(g)}<span>Renombrar ›</span></button>`;
       ord.filter(i=>i.grupo===g).forEach(i=>{ h+=`<button class="row" data-edit="${esc(i.id)}" style="${i.activo===false?"opacity:.45":""}">
         <div class="ic">${ICON[i.icono]||ICON.otro}</div><div class="t"><div class="n">${esc(i.nombre)}</div>
         <div class="s">${i.tipo==="ingreso"?"Ingreso":"Gasto"}${i.venc?" · vence día "+i.venc:""}${i.activo===false?" · archivado":""}</div></div><div class="muted">›</div></button>`; });
@@ -462,10 +492,32 @@
 
   function renderAll(){ renderMes(); renderItems(); if($("#v-evo").classList.contains("on")) renderEvo(); }
 
-  $("#months").addEventListener("click",e=>{ const b=e.target.closest("[data-ym]"); if(!b) return; state.mes=b.dataset.ym; renderAll(); });
-  $("#groups").addEventListener("click",e=>{ const b=e.target.closest("[data-item]"); if(b&&state.db) openMov(b.dataset.item); });
+  $("#mPrev").addEventListener("click",()=>{ state.mes=ymAdd(state.mes,-1); renderAll(); });
+  $("#mNext").addEventListener("click",()=>{ state.mes=ymAdd(state.mes,1); renderAll(); });
+  $("#mLabel").addEventListener("click",e=>{ if(e.target.id==="mHoy"){ state.mes=ymNow(); renderAll(); } });
+  // deslizar con el dedo para cambiar de mes
+  let tx=null,ty=null; const vm=$("#v-mes");
+  vm.addEventListener("touchstart",e=>{ if($("#sheet").classList.contains("on")) return; tx=e.touches[0].clientX; ty=e.touches[0].clientY; },{passive:true});
+  vm.addEventListener("touchend",e=>{ if(tx==null) return; const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty; tx=null;
+    if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)*1.5){ state.mes=ymAdd(state.mes, dx<0?1:-1); renderAll(); } },{passive:true});
+  $("#groups").addEventListener("click",e=>{
+    const g=e.target.closest("[data-group]");
+    if(g){ const k=g.dataset.group; openGroups.has(k)?openGroups.delete(k):openGroups.add(k); try{localStorage.setItem("mc.open",JSON.stringify([...openGroups]));}catch(_){} renderMes(); return; }
+    const b=e.target.closest("[data-item]"); if(b&&state.db) openMov(b.dataset.item); });
   $("#incomeBox").addEventListener("click",e=>{ const b=e.target.closest("[data-item]"); if(b&&state.db) openMov(b.dataset.item); });
-  $("#itemsList").addEventListener("click",e=>{ const b=e.target.closest("[data-edit]"); if(b&&state.db) openItem(b.dataset.edit); });
+  $("#itemsList").addEventListener("click",e=>{
+    const r=e.target.closest("[data-rengroup]"); if(r){ renameGroup(r.dataset.rengroup); return; }
+    const b=e.target.closest("[data-edit]"); if(b&&state.db) openItem(b.dataset.edit); });
+  function renameGroup(g){
+    openSheet(`<h3>Renombrar grupo</h3><div class="sub">Cambia el nombre en todos los ítems de "${esc(g)}".</div>
+      <label class="f">Nombre del grupo</label><input class="in" id="gNom" maxlength="40" value="${esc(g)}">
+      <div class="btns"><button class="btn sec" id="gNo">Cancelar</button><button class="btn pri" id="gSi">Guardar</button></div>`);
+    $("#gNo").onclick=closeSheet;
+    $("#gSi").onclick=()=>{ const n=$("#gNom").value.trim(); if(!n||n===g){ closeSheet(); return; }
+      state.items=state.items.map(i=>i.grupo===g?{...i,grupo:n}:i);
+      if(openGroups.has(g)){ openGroups.delete(g); openGroups.add(n); try{localStorage.setItem("mc.open",JSON.stringify([...openGroups]));}catch(_){} }
+      persist(); closeSheet(); renderAll(); toast("Grupo renombrado"); };
+  }
   $("#addItem").addEventListener("click",()=>{ if(state.db) openItem(null); });
   $("#eye").addEventListener("click",()=>{ hide=!hide; applyHide(); try{localStorage.setItem("mc.hide",hide?"1":"0");}catch(e){} });
   document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>{
