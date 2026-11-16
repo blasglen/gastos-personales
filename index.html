@@ -78,6 +78,7 @@
   .cardnote{font-size:13px;color:var(--mut);margin:10px 4px 0} .cardnote b{color:var(--lime)}
   .subcards{display:grid;gap:8px;margin:2px 0 4px 14px;padding-left:12px;border-left:2px solid var(--edge);animation:fade .2s ease}
   .subcards .xc{padding:12px 14px 13px}
+  .subcards .xc .nm{white-space:normal;line-height:1.2}
   .subcards .xc .ic{width:36px;height:36px;font-size:16px;border-radius:12px}
   .subcards .xc .pc .p{font-size:20px}
   button.gh{display:flex;justify-content:space-between;width:calc(100% - 8px);background:none;border:0;font:inherit;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;margin:18px 4px 8px;padding:0;cursor:pointer}
@@ -261,7 +262,7 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.6.0";
+  const APP_VERSION="1.6.1";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
@@ -429,7 +430,16 @@
     const cq=cuotasDelMes(ym);
     if(cq.length){
       const tot=cuotasTotal(ym), nextTot=cuotasTotal(ymAdd(ym,1));
-      html+=`<div class="sec"><h2>Tarjetas</h2><span>${hasInc?`<b class="num" style="color:var(--ink)">${pctTxt(tot/inc.v*100)}%</b> · `:""}<span class="num money">${fmt0(tot)}</span></span></div><div class="cards">`;
+      const tOpen=openGroups.has("tarjetas"), activeCards=tarjetas().filter(t=>cq.some(q=>q.tarjeta===t));
+      if(!items.length) html+=`<div class="sec"><h2>Gastos</h2><span></span></div>`;
+      html+=`<div class="cards" style="margin-top:10px"><button class="xc gc ${tOpen?"open":""}" data-group="tarjetas">
+        <div class="ic" style="background:rgba(124,92,255,.16)">💳</div>
+        <div style="min-width:0"><div class="nm">Tarjetas</div>
+          <div class="meta"><span>${activeCards.length} tarjetas · ${cq.length} cuotas</span><span class="num money">${fmt0(tot)}</span></div></div>
+        <div class="pc">${hasInc?`<div class="p disp">${pctTxt(tot/inc.v*100)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
+                                 :`<div class="p disp muted">—</div><div class="s"><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`}</div>
+        <div class="track">${activeCards.map(t=>`<i style="width:${hasInc?cardTotal(t,ym)/inc.v*100:cardTotal(t,ym)/tot*100}%;background:${cardColor(t)}"></i>`).join("")}</div></button>`;
+      if(tOpen){ html+=`<div class="subcards">`;
       tarjetas().forEach(t=>{
         const qs=cq.filter(q=>q.tarjeta===t); if(!qs.length) return;
         const sum=qs.reduce((s,q)=>s+q.monto,0), key="card:"+t, isOpen=openGroups.has(key), col=cardColor(t);
@@ -454,8 +464,9 @@
             <div class="cardfoot"><span>Mes que viene <b class="num money">${fmt0(next)}</b>${next<sum?` <em>−${fmt0(sum-next)}</em>`:""}</span><span>Falta pagar <b class="num money">${fmt0(rest)}</b></span></div></div>`;
         }
       });
+      if(nextTot<tot) html+=`<div class="cardnote" style="margin:4px 4px 2px">El mes que viene las cuotas bajan a <b class="num money">${fmt0(nextTot)}</b>.</div>`;
+      html+=`</div>`; }
       html+=`</div>`;
-      if(nextTot<tot) html+=`<div class="cardnote">El mes que viene las cuotas bajan a <b class="num money">${fmt0(nextTot)}</b>.</div>`;
     }
     $("#groups").innerHTML=html;
   }
