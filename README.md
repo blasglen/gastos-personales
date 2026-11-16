@@ -15,5 +15,5 @@ App personal de ingresos y gastos, instalable en el celular (PWA). Cada ítem ti
 
 ## Publicar cambios
 
-1. Subir `APP_VERSION` en `index.html` y `VERSION` en `sw.js`.
+1. Subir el número de versión en los tres lugares: `APP_VERSION` en `index.html`, `VERSION` en `sw.js` y `version.json`. La app avisa "Hay una versión nueva" al abrirse.
 2. Hacer push a `main`: GitHub Pages publica solo.
