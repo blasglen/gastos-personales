@@ -56,6 +56,9 @@
   .gc .track i{border-radius:0}
   .gc .track i:first-child{border-radius:99px 0 0 99px}
   .gc .track i:last-child{border-radius:0 99px 99px 0}
+  .badge{border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+  .badge b{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;line-height:1;letter-spacing:-.02em}
+  .badge i{font-style:normal;font-size:7.5px;font-weight:700;letter-spacing:.06em;margin-top:2px;opacity:.9}
   .cardfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);padding:4px 4px 2px}
   .cardfoot b{color:var(--ink);font-weight:600} .cardfoot em{color:var(--lime);font-style:normal}
   .cardnote{font-size:13px;color:var(--mut);margin:10px 4px 0} .cardnote b{color:var(--lime)}
@@ -242,7 +245,7 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.2.0";
+  const APP_VERSION="1.3.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
@@ -296,6 +299,19 @@
   const cuotasDelMes = ym => cuotasList().filter(q=>cuotaActiva(q,ym)).sort((a,b)=>cuotaFin(a).localeCompare(cuotaFin(b))||a.nombre.localeCompare(b.nombre));
   const tarjetas = () => { const t=[]; cuotasList().sort((a,b)=>a.tarjeta.localeCompare(b.tarjeta)).forEach(q=>{ if(!t.includes(q.tarjeta)) t.push(q.tarjeta); }); return t; };
   const CARDPAL = ["#7c5cff","#ff5ca8","#4dd6ff","#ffa45c","#5cffb0","#b38bff","#ffc24d"];
+  // Insignia de cada tarjeta: color del banco + iniciales + red (Visa / Mastercard)
+  const BANKS = [
+    [/galicia/i,"#e8671c","G"],[/macro/i,"#1f3f8f","M"],[/mercado\s*pago|^mp\b/i,"#00a6e6","MP"],[/santander/i,"#e3120b","S"],
+    [/bbva|franc[eé]s/i,"#0d3c8c","BB"],[/naci[oó]n/i,"#1b5aa6","BN"],[/provincia/i,"#0f8a4a","BP"],[/naranja/i,"#f26a1b","N"],
+    [/ual[aá]/i,"#2b2bd8","U"],[/brubank/i,"#5b2be0","B"],[/icbc/i,"#c4161c","IC"],[/hsbc/i,"#d40000","H"],[/patagonia/i,"#1a6fb5","P"],
+    [/supervielle/i,"#c8102e","SV"],[/credicoop/i,"#0e7c3a","C"],[/ciudad/i,"#0a5fa8","CI"],[/comaf|comafi/i,"#004b87","CF"]];
+  const NETS = [[/visa/i,"VISA"],[/master/i,"MC"],[/amex|american/i,"AMEX"],[/cabal/i,"CABAL"],[/naranja/i,""]];
+  function cardBadge(t, size){
+    const b=BANKS.find(([re])=>re.test(t)); const net=(NETS.find(([re])=>re.test(t))||[,""])[1];
+    const bg=b?b[1]:cardColor(t), ini=b?b[2]:(t.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase()||"?");
+    const s=size||42;
+    return `<div class="badge" style="width:${s}px;height:${s}px;background:linear-gradient(145deg,${bg},${bg}cc)"><b style="font-size:${ini.length>1?s*.32:s*.42}px">${esc(ini)}</b>${net?`<i>${net}</i>`:""}</div>`;
+  }
   const cardColor = t => CARDPAL[Math.max(0,tarjetas().indexOf(t)) % CARDPAL.length];
   const cardTotal = (t,ym) => cuotasDelMes(ym).filter(q=>q.tarjeta===t).reduce((s,q)=>s+q.monto,0);
   const cuotasTotal = ym => cuotasDelMes(ym).reduce((s,q)=>s+q.monto,0);
@@ -396,7 +412,7 @@
         const pc=hasInc?sum/inc.v*100:null, next=cardTotal(t,ymAdd(ym,1));
         const segs=qs.map(q=>`<i style="width:${hasInc?q.monto/inc.v*100:q.monto/sum*100}%;background:${col};opacity:${.45+.55*(q.monto/Math.max(...qs.map(x=>x.monto)))}"></i>`).join("");
         html+=`<button class="xc gc ${isOpen?"open":""}" data-group="${esc(key)}">
-          <div class="ic" style="background:${col}24">💳</div>
+          ${cardBadge(t,42)}
           <div style="min-width:0"><div class="nm">${esc(t)}</div>
             <div class="meta"><span>${qs.length} ${qs.length===1?"cuota":"cuotas"}</span><span class="num money">${fmt0(sum)}</span></div></div>
           <div class="pc">${pc!=null?`<div class="p disp" style="color:${col}">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
@@ -466,7 +482,7 @@
     let h="";
     tarjetas().forEach(t=>{
       const qs=all.filter(q=>q.tarjeta===t).sort((a,b)=>cuotaFin(b).localeCompare(cuotaFin(a)));
-      h+=`<div class="gh" style="display:flex;justify-content:space-between"><span>💳 ${esc(t)}</span></div>`;
+      h+=`<div class="gh" style="display:flex;align-items:center;gap:10px">${cardBadge(t,28)}<span>${esc(t)}</span></div>`;
       qs.forEach(q=>{ const fin=cuotaFin(q), done=fin<now, notyet=q.primera>now;
         h+=`<button class="row" data-cuota="${esc(q.id)}" style="${done?"opacity:.45":""}">
           <div class="ic" style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace">${q.t}x</div>
@@ -482,8 +498,9 @@
       <h3>${q?"Compra en cuotas":"Nueva compra en cuotas"}</h3>
       <div class="sub">${q?`Cuota ${Math.min(Math.max(cuotaN(q,state.mes),0),q.t)}/${q.t} en ${ymLabel(state.mes)}`:"Cargá la cuota mensual y desde qué mes se paga."}</div>
       <label class="f">¿Qué compraste?</label><input class="in" id="qNom" maxlength="60" placeholder="Ej: TV Samsung 65" value="${esc(q?.nombre||"")}">
-      <label class="f">Tarjeta</label><input class="in" id="qTar" maxlength="40" list="tlist" placeholder="Ej: Galicia Visa" value="${esc(q?.tarjeta||tarjetaDef||"")}">
-      <datalist id="tlist">${cards.map(t=>`<option value="${esc(t)}">`).join("")}</datalist>
+      <label class="f">Tarjeta</label>
+      ${cards.length?`<select class="in" id="qTarSel">${!q&&!tarjetaDef?`<option value="" selected disabled>Elegí una tarjeta</option>`:""}${cards.map(t=>`<option value="${esc(t)}" ${(q?.tarjeta||tarjetaDef)===t?"selected":""}>${esc(t)}</option>`).join("")}<option value="__new">＋ Agregar otra tarjeta…</option></select>`:""}
+      <input class="in" id="qTar" maxlength="40" placeholder="Nueva tarjeta, ej: Galicia Visa" style="${cards.length?"display:none;margin-top:8px":""}">
       <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px">
         <div><label class="f">Valor de cada cuota</label><input class="in num" id="qMon" inputmode="decimal" placeholder="0,00" value="${q?String(q.monto).replace(".",","):""}"></div>
         <div><label class="f">Cuotas</label><input class="in num" id="qT" inputmode="numeric" maxlength="2" placeholder="12" value="${q?.t||""}"></div>
@@ -494,14 +511,15 @@
     const live=()=>{ const m=parseAmt($("#qMon").value), t=parseInt($("#qT").value,10), p=$("#qPri").value;
       $("#qLive").textContent = (isFinite(m)&&m>0&&t>0&&/^\d{4}-\d{2}$/.test(p)) ? `Total ${fmt0(m*t)} · última cuota en ${ymLabel(ymAdd(p,t-1))}` : ""; };
     ["qMon","qT","qPri"].forEach(k=>$("#"+k).addEventListener("input",live)); live();
+    $("#qTarSel")?.addEventListener("change",e=>{ const nw=e.target.value==="__new"; $("#qTar").style.display=nw?"block":"none"; if(nw) $("#qTar").focus(); });
     $("#qNo")?.addEventListener("click",closeSheet);
     $("#qDel")?.addEventListener("click",()=>{
       $("#qDel").outerHTML=`<button class="btn dan" id="qDel2">¿Seguro? Borrar</button>`;
       $("#qDel2").onclick=()=>{ delete state.cuotas[id]; persist(); closeSheet(); renderAll(); toast("Compra borrada"); }; });
     $("#qSi").addEventListener("click",()=>{
-      const nombre=$("#qNom").value.trim(), tarjeta=$("#qTar").value.trim(), monto=parseAmt($("#qMon").value), t=parseInt($("#qT").value,10), primera=$("#qPri").value;
+      const sel=$("#qTarSel"), tarjeta=(!sel||sel.value==="__new") ? $("#qTar").value.trim() : sel.value, nombre=$("#qNom").value.trim(), monto=parseAmt($("#qMon").value), t=parseInt($("#qT").value,10), primera=$("#qPri").value;
       let bad=false; const mark=(k,c)=>{ $("#"+k).style.outline=c?"2px solid var(--coral)":""; if(c) bad=true; };
-      mark("qNom",!nombre); mark("qTar",!tarjeta); mark("qMon",!(isFinite(monto)&&monto>0)); mark("qT",!(t>=1&&t<=72)); mark("qPri",!/^\d{4}-\d{2}$/.test(primera));
+      mark("qNom",!nombre); mark(sel&&sel.value!=="__new"?"qTarSel":"qTar",!tarjeta); mark("qMon",!(isFinite(monto)&&monto>0)); mark("qT",!(t>=1&&t<=72)); mark("qPri",!/^\d{4}-\d{2}$/.test(primera));
       if(bad) return;
       const nid=id||("q-"+Date.now().toString(36));
       state.cuotas[nid]={nombre,tarjeta,monto:Math.round(monto*100)/100,t,primera};
