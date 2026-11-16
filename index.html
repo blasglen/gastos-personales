@@ -56,6 +56,9 @@
   .gc .track i{border-radius:0}
   .gc .track i:first-child{border-radius:99px 0 0 99px}
   .gc .track i:last-child{border-radius:0 99px 99px 0}
+  .cardfoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);padding:4px 4px 2px}
+  .cardfoot b{color:var(--ink);font-weight:600} .cardfoot em{color:var(--lime);font-style:normal}
+  .cardnote{font-size:13px;color:var(--mut);margin:10px 4px 0} .cardnote b{color:var(--lime)}
   .subcards{display:grid;gap:8px;margin:2px 0 4px 14px;padding-left:12px;border-left:2px solid var(--edge);animation:fade .2s ease}
   .subcards .xc{padding:12px 14px 13px}
   .subcards .xc .ic{width:36px;height:36px;font-size:16px;border-radius:12px}
@@ -220,6 +223,9 @@
     <div class="sub muted" style="font-size:14px;margin:0 4px 6px">Tus ingresos y gastos, cada uno con su nombre. Tocá uno para editarlo.</div>
     <div id="itemsList"></div>
     <div class="addrow"><button id="addItem">+ Nuevo ítem</button></div>
+    <div class="sec" style="margin-top:30px"><h2>Compras en cuotas</h2><span></span></div>
+    <div id="cuotasList"></div>
+    <div class="addrow"><button id="addCuota">+ Nueva compra en cuotas</button></div>
   </section>
 </div>
 
@@ -236,7 +242,7 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.1.0";
+  const APP_VERSION="1.2.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
@@ -255,7 +261,7 @@
     return Number(s); };
   const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-  const state = { mes: ymNow(), items: [], movs: {}, ready:false, db:null, base:null };
+  const state = { mes: ymNow(), items: [], movs: {}, cuotas: {}, ready:false, db:null, base:null };
   let openGroups=new Set(); try{ openGroups=new Set(JSON.parse(localStorage.getItem("mc.open")||"[]")); }catch(e){}
   let hide=false; try{ hide = localStorage.getItem("mc.hide")==="1"; }catch(e){}
   const applyHide = () => document.body.classList.toggle("hide", hide);
@@ -281,7 +287,25 @@
       const lk=lastKnown(i.id,ym); if(lk){ v+=lk.importe||0; est=true; estNames.push(i.nombre); if(!from||lk.ym>from) from=lk.ym; } });
     return {v, est, from, estNames};
   }
-  function spend(ym){ let g=0,pag=0,c=0; gastos().forEach(i=>{ const m=mov(i.id,ym); if(m){ g+=m.importe||0; c++; if(m.pagado) pag+=m.importe||0; } }); return {g,pag,c,n:gastos().length}; }
+  // ---------- cuotas ----------
+  const ymDiff = (a,b) => { const [ya,ma]=a.split("-").map(Number), [yb,mb]=b.split("-").map(Number); return (yb-ya)*12+(mb-ma); };
+  const cuotaFin = q => ymAdd(q.primera, (q.t||1)-1);
+  const cuotaN = (q,ym) => ymDiff(q.primera, ym)+1;            // número de cuota que cae en ese mes
+  const cuotaActiva = (q,ym) => { const n=cuotaN(q,ym); return n>=1 && n<=q.t; };
+  const cuotasList = () => Object.entries(state.cuotas).map(([id,q])=>({id,...q}));
+  const cuotasDelMes = ym => cuotasList().filter(q=>cuotaActiva(q,ym)).sort((a,b)=>cuotaFin(a).localeCompare(cuotaFin(b))||a.nombre.localeCompare(b.nombre));
+  const tarjetas = () => { const t=[]; cuotasList().sort((a,b)=>a.tarjeta.localeCompare(b.tarjeta)).forEach(q=>{ if(!t.includes(q.tarjeta)) t.push(q.tarjeta); }); return t; };
+  const CARDPAL = ["#7c5cff","#ff5ca8","#4dd6ff","#ffa45c","#5cffb0","#b38bff","#ffc24d"];
+  const cardColor = t => CARDPAL[Math.max(0,tarjetas().indexOf(t)) % CARDPAL.length];
+  const cardTotal = (t,ym) => cuotasDelMes(ym).filter(q=>q.tarjeta===t).reduce((s,q)=>s+q.monto,0);
+  const cuotasTotal = ym => cuotasDelMes(ym).reduce((s,q)=>s+q.monto,0);
+  // Lo que falta pagar DESPUÉS de este mes
+  const restante = (q,ym) => { const n=Math.max(0,cuotaN(q,ym)); return Math.max(0,(q.t-n))*q.monto; };
+  // Series para gráficos: cada gasto + cada tarjeta
+  const seriesList = () => gastos().map(i=>({id:i.id,nombre:i.nombre,color:color(i.id),val:ym=>{ const m=mov(i.id,ym); return m?m.importe:0; }}))
+    .concat(tarjetas().map(t=>({id:"card:"+t,nombre:"💳 "+t,color:cardColor(t),val:ym=>cardTotal(t,ym)})));
+
+  function spend(ym){ let g=0,c=0; gastos().forEach(i=>{ const m=mov(i.id,ym); if(m){ g+=m.importe||0; c++; } }); const q=cuotasTotal(ym); return {g:g+q,cuotas:q,c,n:gastos().length}; }
 
   // ---------- mes ----------
   function renderMonths(){
@@ -302,14 +326,14 @@
     let h=`<div class="hero-top">
       <div class="ring">${ringSVG(p??0)}<div class="c">
         <div class="pct disp">${p==null?"—":pctTxt(p)+"<small>%</small>"}</div>
-        <div class="cap">${p==null?"cargá tu<br>ingreso":"del ingreso<br>en cuentas"}</div></div></div>
+        <div class="cap">${p==null?"cargá tu<br>ingreso":"del ingreso<br>en gastos"}</div></div></div>
       <div class="kv">
         <div><div class="l">Ingreso${inc.est?" (estimado)":""}</div><div class="v num money lime">${hasInc?fmt0(inc.v):"—"}</div></div>
-        <div><div class="l">Cuentas · ${s.c}/${s.n}</div><div class="v num money">${fmt0(s.g)}</div></div>
+        <div><div class="l">Gastos${s.c<s.n?` · ${s.c}/${s.n} cargados`:""}</div><div class="v num money">${fmt0(s.g)}</div></div>
         <div><div class="l">Te queda</div><div class="v num money ${hasInc&&inc.v-s.g<0?"coral":""}">${hasInc?fmt0(inc.v-s.g):"—"}</div></div>
       </div></div>`;
     if(hasInc){
-      const segs = gastos().map(i=>{ const m=mov(i.id,ym); return m? `<i style="flex:0 0 ${Math.max(0,(m.importe/Math.max(inc.v,s.g))*100)}%;background:${color(i.id)}" title="${esc(i.nombre)}"></i>`:""; }).join("");
+      const segs = seriesList().map(se=>{ const v=se.val(ym); return v? `<i style="flex:0 0 ${Math.max(0,(v/Math.max(inc.v,s.g))*100)}%;background:${se.color}"></i>`:""; }).join("");
       h+=`<div class="strip">${segs}</div><div class="strip-cap"><span>Cómo se reparte tu ingreso</span><span>${p<=100?"Libre "+pctTxt(100-p)+"%":"Te pasaste "+pctTxt(p-100)+"%"}</span></div>`;
       if(inc.est) h+=`<div class="note">${esc(inc.estNames.join(" y "))}: todavía sin cargar este mes, uso el último importe conocido.</div>`;
     } else {
@@ -325,7 +349,7 @@
 
     // gastos por grupo
     const items=gastos();
-    if(!items.length){ $("#groups").innerHTML=`<div class="empty">Todavía no hay gastos. Andá a <b>Ítems</b> y creá el primero.</div>`; return; }
+    if(!items.length && !cuotasList().length){ $("#groups").innerHTML=`<div class="empty">Todavía no hay gastos. Andá a <b>Ítems</b> y creá el primero.</div>`; return; }
     const maxP = Math.max(1,...items.map(i=>{ const m=mov(i.id,ym); return m?m.importe:0; }));
     const card = (i, sub) => {
       const m=mov(i.id,ym), col=color(i.id), lk=m?null:lastKnown(i.id,ym);
@@ -359,6 +383,40 @@
       if(isOpen) html+=`<div class="subcards">${gi.map(i=>card(i,true)).join("")}</div>`;
     });
     html+=`</div>`;
+    if(!items.length) html="";
+
+    // tarjetas con cuotas
+    const cq=cuotasDelMes(ym);
+    if(cq.length){
+      const tot=cuotasTotal(ym), nextTot=cuotasTotal(ymAdd(ym,1));
+      html+=`<div class="sec"><h2>Tarjetas</h2><span>${hasInc?`<b class="num" style="color:var(--ink)">${pctTxt(tot/inc.v*100)}%</b> · `:""}<span class="num money">${fmt0(tot)}</span></span></div><div class="cards">`;
+      tarjetas().forEach(t=>{
+        const qs=cq.filter(q=>q.tarjeta===t); if(!qs.length) return;
+        const sum=qs.reduce((s,q)=>s+q.monto,0), key="card:"+t, isOpen=openGroups.has(key), col=cardColor(t);
+        const pc=hasInc?sum/inc.v*100:null, next=cardTotal(t,ymAdd(ym,1));
+        const segs=qs.map(q=>`<i style="width:${hasInc?q.monto/inc.v*100:q.monto/sum*100}%;background:${col};opacity:${.45+.55*(q.monto/Math.max(...qs.map(x=>x.monto)))}"></i>`).join("");
+        html+=`<button class="xc gc ${isOpen?"open":""}" data-group="${esc(key)}">
+          <div class="ic" style="background:${col}24">💳</div>
+          <div style="min-width:0"><div class="nm">${esc(t)}</div>
+            <div class="meta"><span>${qs.length} ${qs.length===1?"cuota":"cuotas"}</span><span class="num money">${fmt0(sum)}</span></div></div>
+          <div class="pc">${pc!=null?`<div class="p disp" style="color:${col}">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
+                                    :`<div class="p disp muted">—</div><div class="s"><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`}</div>
+          <div class="track">${segs}</div></button>`;
+        if(isOpen){
+          const rest=qs.reduce((s,q)=>s+restante(q,ym),0);
+          html+=`<div class="subcards">${qs.map(q=>{ const n=cuotaN(q,ym), last=n===q.t, p=hasInc?q.monto/inc.v*100:null;
+            return `<button class="xc" data-cuota="${esc(q.id)}">
+              <div class="ic" style="background:${col}1f;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace">${n}/${q.t}</div>
+              <div style="min-width:0"><div class="nm">${esc(q.nombre)}</div>
+                <div class="meta"><span class="num money">${fmt(q.monto)}</span>${last?`<span class="tag ok">Última</span>`:`<span>hasta ${ymShort(cuotaFin(q))}</span>`}</div></div>
+              <div class="pc">${p!=null?`<div class="p disp" style="color:${col}">${pctTxt(p)}<small>%</small></div><div class="s">del ingreso</div>`:""}</div>
+              <div class="track"><i style="width:${n/q.t*100}%;background:${col}"></i></div></button>`; }).join("")}
+            <div class="cardfoot"><span>Mes que viene <b class="num money">${fmt0(next)}</b>${next<sum?` <em>−${fmt0(sum-next)}</em>`:""}</span><span>Falta pagar <b class="num money">${fmt0(rest)}</b></span></div></div>`;
+        }
+      });
+      html+=`</div>`;
+      if(nextTot<tot) html+=`<div class="cardnote">El mes que viene las cuotas bajan a <b class="num money">${fmt0(nextTot)}</b>.</div>`;
+    }
     $("#groups").innerHTML=html;
   }
 
@@ -402,8 +460,57 @@
     });
   }
 
+  function renderCuotasList(){
+    const all=cuotasList(), now=state.mes;
+    if(!all.length){ $("#cuotasList").innerHTML=`<div class="empty" style="padding:14px">Sin compras en cuotas.</div>`; return; }
+    let h="";
+    tarjetas().forEach(t=>{
+      const qs=all.filter(q=>q.tarjeta===t).sort((a,b)=>cuotaFin(b).localeCompare(cuotaFin(a)));
+      h+=`<div class="gh" style="display:flex;justify-content:space-between"><span>💳 ${esc(t)}</span></div>`;
+      qs.forEach(q=>{ const fin=cuotaFin(q), done=fin<now, notyet=q.primera>now;
+        h+=`<button class="row" data-cuota="${esc(q.id)}" style="${done?"opacity:.45":""}">
+          <div class="ic" style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace">${q.t}x</div>
+          <div class="t"><div class="n">${esc(q.nombre)}</div>
+          <div class="s"><span class="num money">${fmt0(q.monto)}</span>/mes · ${ymShort(q.primera)} → ${ymShort(fin)}${done?" · terminada":notyet?" · empieza "+ymShort(q.primera):""}</div></div><div class="muted">›</div></button>`; });
+    });
+    $("#cuotasList").innerHTML=h;
+  }
+  function openCuota(id, tarjetaDef){
+    const q=id?state.cuotas[id]:null;
+    const cards=tarjetas();
+    openSheet(`
+      <h3>${q?"Compra en cuotas":"Nueva compra en cuotas"}</h3>
+      <div class="sub">${q?`Cuota ${Math.min(Math.max(cuotaN(q,state.mes),0),q.t)}/${q.t} en ${ymLabel(state.mes)}`:"Cargá la cuota mensual y desde qué mes se paga."}</div>
+      <label class="f">¿Qué compraste?</label><input class="in" id="qNom" maxlength="60" placeholder="Ej: TV Samsung 65" value="${esc(q?.nombre||"")}">
+      <label class="f">Tarjeta</label><input class="in" id="qTar" maxlength="40" list="tlist" placeholder="Ej: Galicia Visa" value="${esc(q?.tarjeta||tarjetaDef||"")}">
+      <datalist id="tlist">${cards.map(t=>`<option value="${esc(t)}">`).join("")}</datalist>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px">
+        <div><label class="f">Valor de cada cuota</label><input class="in num" id="qMon" inputmode="decimal" placeholder="0,00" value="${q?String(q.monto).replace(".",","):""}"></div>
+        <div><label class="f">Cuotas</label><input class="in num" id="qT" inputmode="numeric" maxlength="2" placeholder="12" value="${q?.t||""}"></div>
+      </div>
+      <label class="f">Mes de la primera cuota</label><input class="in" id="qPri" type="month" value="${q?.primera||state.mes}">
+      <div class="live" id="qLive"></div>
+      <div class="btns">${q?`<button class="btn dan" id="qDel">Borrar</button>`:`<button class="btn sec" id="qNo">Cancelar</button>`}<button class="btn pri" id="qSi">Guardar</button></div>`);
+    const live=()=>{ const m=parseAmt($("#qMon").value), t=parseInt($("#qT").value,10), p=$("#qPri").value;
+      $("#qLive").textContent = (isFinite(m)&&m>0&&t>0&&/^\d{4}-\d{2}$/.test(p)) ? `Total ${fmt0(m*t)} · última cuota en ${ymLabel(ymAdd(p,t-1))}` : ""; };
+    ["qMon","qT","qPri"].forEach(k=>$("#"+k).addEventListener("input",live)); live();
+    $("#qNo")?.addEventListener("click",closeSheet);
+    $("#qDel")?.addEventListener("click",()=>{
+      $("#qDel").outerHTML=`<button class="btn dan" id="qDel2">¿Seguro? Borrar</button>`;
+      $("#qDel2").onclick=()=>{ delete state.cuotas[id]; persist(); closeSheet(); renderAll(); toast("Compra borrada"); }; });
+    $("#qSi").addEventListener("click",()=>{
+      const nombre=$("#qNom").value.trim(), tarjeta=$("#qTar").value.trim(), monto=parseAmt($("#qMon").value), t=parseInt($("#qT").value,10), primera=$("#qPri").value;
+      let bad=false; const mark=(k,c)=>{ $("#"+k).style.outline=c?"2px solid var(--coral)":""; if(c) bad=true; };
+      mark("qNom",!nombre); mark("qTar",!tarjeta); mark("qMon",!(isFinite(monto)&&monto>0)); mark("qT",!(t>=1&&t<=72)); mark("qPri",!/^\d{4}-\d{2}$/.test(primera));
+      if(bad) return;
+      const nid=id||("q-"+Date.now().toString(36));
+      state.cuotas[nid]={nombre,tarjeta,monto:Math.round(monto*100)/100,t,primera};
+      if(!persist()) return; closeSheet(); renderAll(); toast(id?"Compra actualizada":"Compra agregada");
+    });
+  }
   function renderItems(){
     if(!state.ready) return;
+    renderCuotasList();
     const all=sorted(state.items);
     if(!all.length){ $("#itemsList").innerHTML=`<div class="empty">Sin ítems todavía.</div>`; return; }
     let h=""; const ord = [...all.filter(i=>i.tipo==="ingreso"), ...all.filter(i=>i.tipo!=="ingreso")];
@@ -453,8 +560,8 @@
   function renderEvo(){
     if(!state.ready) return;
     const wrap=$("#chart"), tip=$("#tip"); wrap.querySelectorAll("svg").forEach(s=>s.remove());
-    const items=gastos(), end=state.mes, months=[]; for(let k=5;k>=0;k--) months.push(ymAdd(end,-k));
-    const data=months.map(ym=>{ const r={ym,total:0,inc:income(ym)}; items.forEach(i=>{ const m=mov(i.id,ym); r[i.id]=m?m.importe:0; r.total+=r[i.id]; }); return r; });
+    const items=seriesList(), end=state.mes, months=[]; for(let k=5;k>=0;k--) months.push(ymAdd(end,-k));
+    const data=months.map(ym=>{ const r={ym,total:0,inc:income(ym)}; items.forEach(i=>{ r[i.id]=i.val(ym); r.total+=r[i.id]; }); return r; });
     $("#evoSub").textContent="Últimos 6 meses, hasta "+ymLabel(end);
     const W=Math.max(280,wrap.clientWidth||320), H=230, pl=6, pr=6, pt=24, pb=26;
     const max=Math.max(1,...data.map(d=>Math.max(d.total,d.inc.v)));
@@ -465,21 +572,21 @@
     data.forEach((d,idx)=>{
       const x=pl+idx*bw+bw*.2, w=bw*.6, g=mk("g",{}); let acc=0;
       items.forEach(i=>{ const v=d[i.id]; if(!v) return; const y1=y(acc+v), y0=y(acc);
-        g.appendChild(mk("rect",{x,y:y1,width:w,height:Math.max(0,y0-y1-1.5),rx:4,fill:color(i.id)})); acc+=v; });
+        g.appendChild(mk("rect",{x,y:y1,width:w,height:Math.max(0,y0-y1-1.5),rx:4,fill:i.color})); acc+=v; });
       if(d.inc.v>0){ const yi=y(d.inc.v); g.appendChild(mk("line",{x1:x-5,x2:x+w+5,y1:yi,y2:yi,stroke:"#f3f1ea","stroke-width":2,"stroke-dasharray":d.inc.est?"3 3":"0"})); }
       const lab = d.inc.v>0&&d.total>0 ? pctTxt(d.total/d.inc.v*100)+"%" : (d.total?fmtK(d.total):"");
       if(lab) g.appendChild(mk("text",{x:x+w/2,y:Math.min(y(d.total),d.inc.v?y(d.inc.v):H)-8,"text-anchor":"middle",fill:"#f3f1ea","font-size":11.5,"font-family":"JetBrains Mono, monospace","font-weight":700,class:d.inc.v?"":"money"},lab));
       g.appendChild(mk("text",{x:x+w/2,y:H-8,"text-anchor":"middle",fill:d.ym===end?"#f3f1ea":"#8b8f9c","font-size":11.5},ymShort(d.ym)));
       const hit=mk("rect",{x:pl+idx*bw,y:0,width:bw,height:H,fill:"transparent"});
       const show=()=>{ if(hide){tip.style.opacity=0;return;}
-        tip.innerHTML=`<b style="text-transform:capitalize">${ymLabel(d.ym)}</b><br>`+items.filter(i=>d[i.id]).map(i=>`<span style="color:${color(i.id)}">■</span> ${esc(i.nombre)}: ${fmt0(d[i.id])}${d.inc.v?` · ${pctTxt(d[i.id]/d.inc.v*100)}%`:""}`).join("<br>")
-          +`<br><b>Cuentas: ${fmt0(d.total)}</b>${d.inc.v?`<br>Ingreso${d.inc.est?" (est.)":""}: ${fmt0(d.inc.v)}`:""}`;
+        tip.innerHTML=`<b style="text-transform:capitalize">${ymLabel(d.ym)}</b><br>`+items.filter(i=>d[i.id]).map(i=>`<span style="color:${i.color}">■</span> ${esc(i.nombre)}: ${fmt0(d[i.id])}${d.inc.v?` · ${pctTxt(d[i.id]/d.inc.v*100)}%`:""}`).join("<br>")
+          +`<br><b>Gastos: ${fmt0(d.total)}</b>${d.inc.v?`<br>Ingreso${d.inc.est?" (est.)":""}: ${fmt0(d.inc.v)}`:""}`;
         tip.style.opacity=1; const tw=tip.offsetWidth; let left=pl+idx*bw+bw/2-tw/2; left=Math.max(0,Math.min(W-tw,left)); tip.style.left=left+"px"; tip.style.top="0px"; };
       hit.addEventListener("mouseenter",show); hit.addEventListener("click",show); hit.addEventListener("mouseleave",()=>tip.style.opacity=0);
       g.appendChild(hit); svg.appendChild(g);
     });
     wrap.appendChild(svg);
-    $("#legend").innerHTML = items.map(i=>`<span><i style="background:${color(i.id)}"></i>${esc(i.nombre)}</span>`).join("") + `<span><i style="background:#f3f1ea;height:2px;vertical-align:3px"></i>Ingreso</span>`;
+    $("#legend").innerHTML = items.map(i=>`<span><i style="background:${i.color}"></i>${esc(i.nombre)}</span>`).join("") + `<span><i style="background:#f3f1ea;height:2px;vertical-align:3px"></i>Ingreso</span>`;
     let h=`<table class="hist"><thead><tr><th>Ítem</th>${months.map(m=>`<th>${ymShort(m)}</th>`).join("")}</tr></thead><tbody>`;
     items.forEach(i=>{
       h+=`<tr><td>${esc(i.nombre)}</td>${data.map(d=>`<td class="num money">${d[i.id]?fmtK(d[i.id]):"<span class='muted'>—</span>"}</td>`).join("")}</tr>`;
@@ -503,6 +610,7 @@
   $("#groups").addEventListener("click",e=>{
     const g=e.target.closest("[data-group]");
     if(g){ const k=g.dataset.group; openGroups.has(k)?openGroups.delete(k):openGroups.add(k); try{localStorage.setItem("mc.open",JSON.stringify([...openGroups]));}catch(_){} renderMes(); return; }
+    const qc=e.target.closest("[data-cuota]"); if(qc){ openCuota(qc.dataset.cuota); return; }
     const b=e.target.closest("[data-item]"); if(b&&state.db) openMov(b.dataset.item); });
   $("#incomeBox").addEventListener("click",e=>{ const b=e.target.closest("[data-item]"); if(b&&state.db) openMov(b.dataset.item); });
   $("#itemsList").addEventListener("click",e=>{
@@ -519,6 +627,8 @@
       persist(); closeSheet(); renderAll(); toast("Grupo renombrado"); };
   }
   $("#addItem").addEventListener("click",()=>{ if(state.db) openItem(null); });
+  $("#addCuota").addEventListener("click",()=>openCuota(null));
+  $("#cuotasList").addEventListener("click",e=>{ const b=e.target.closest("[data-cuota]"); if(b) openCuota(b.dataset.cuota); });
   $("#eye").addEventListener("click",()=>{ hide=!hide; applyHide(); try{localStorage.setItem("mc.hide",hide?"1":"0");}catch(e){} });
   document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>{
     document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("on",x===b));
@@ -530,8 +640,8 @@
 
   // ---------- almacenamiento local (todo vive en este celu) ----------
   const KEY="misCuentas.v1";
-  function persist(){ try{ localStorage.setItem(KEY, JSON.stringify({items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])), movs:state.movs})); return true; }catch(e){ toast("No se pudo guardar en el celu"); return false; } }
-  function loadAll(){ try{ const r=JSON.parse(localStorage.getItem(KEY)||"null"); if(r){ state.items=Object.entries(r.items||{}).map(([id,d])=>({id,...d})); state.movs=r.movs||{}; } }catch(e){ banner("No se pudieron leer los datos guardados."); } }
+  function persist(){ try{ localStorage.setItem(KEY, JSON.stringify({items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])), movs:state.movs, cuotas:state.cuotas})); return true; }catch(e){ toast("No se pudo guardar en el celu"); return false; } }
+  function loadAll(){ try{ const r=JSON.parse(localStorage.getItem(KEY)||"null"); if(r){ state.items=Object.entries(r.items||{}).map(([id,d])=>({id,...d})); state.movs=r.movs||{}; state.cuotas=r.cuotas||{}; } }catch(e){ banner("No se pudieron leer los datos guardados."); } }
   // misma interfaz que usan los paneles de carga: doc(".../items/id" | ".../movs/id").set/delete
   state.base="local";
   state.db={ doc:path=>{ const [col,id]=path.split("/").slice(-2);
@@ -540,7 +650,7 @@
 
   // ---------- backup ----------
   function exportar(){
-    const data={app:"mis-cuentas",version:1,exportado:new Date().toISOString().slice(0,10),items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])),movs:state.movs};
+    const data={app:"mis-cuentas",version:1,exportado:new Date().toISOString().slice(0,10),items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])),movs:state.movs,cuotas:state.cuotas};
     const blob=new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
     const f=new File([blob],`mis-cuentas-backup-${data.exportado}.json`,{type:"application/json"});
     if(navigator.canShare && navigator.canShare({files:[f]})){ navigator.share({files:[f],title:"Backup Mis Cuentas"}).catch(()=>{}); return; }
@@ -549,19 +659,33 @@
   function importar(file){
     const rd=new FileReader();
     rd.onload=()=>{ try{ const d=JSON.parse(rd.result);
+        if(d.app==="MisGastos" && d.config && Array.isArray(d.config.cuotas)){ importarCuotasMisGastos(d); return; }
         if(d.app!=="mis-cuentas"||!d.items||!d.movs) throw 0;
         const n=Object.keys(d.items).length, m=Object.keys(d.movs).length;
         openSheet(`<h3>Importar backup</h3><div class="sub">${n} ítems y ${m} importes${d.exportado?" · exportado el "+esc(d.exportado):""}.<br>Reemplaza todo lo que hay ahora en la app.</div>
           <div class="btns"><button class="btn sec" id="impNo">Cancelar</button><button class="btn pri" id="impSi">Importar</button></div>`);
         $("#impNo").onclick=closeSheet;
-        $("#impSi").onclick=()=>{ state.items=Object.entries(d.items).map(([id,x])=>({id,...x})); state.movs=d.movs; persist(); closeSheet(); renderAll(); toast("Backup importado"); };
+        $("#impSi").onclick=()=>{ state.items=Object.entries(d.items).map(([id,x])=>({id,...x})); state.movs=d.movs; state.cuotas=d.cuotas||{}; persist(); closeSheet(); renderAll(); toast("Backup importado"); };
       }catch(e){ toast("Ese archivo no es un backup de Mis Cuentas"); } };
     rd.readAsText(file);
+  }
+  // Backup de la app "MisGastos / Tu Contador": se suman solo las compras en cuotas
+  function importarCuotasMisGastos(d){
+    const nuevas=d.config.cuotas.filter(q=>q&&q.n&&q.m>0&&q.t>0).map(q=>({nombre:String(q.n).trim(),tarjeta:String(q.f||"Sin tarjeta").trim(),monto:Number(q.m),t:Number(q.t),
+      primera: ymAdd(/^\d{4}-\d{2}$/.test(q.d)?q.d:ymNow(), -((Number(q.c)||1)-1))}));
+    const key=q=>(q.nombre+"|"+q.tarjeta).toLowerCase();
+    const exist=new Map(cuotasList().map(q=>[key(q),q.id]));
+    const rep=nuevas.filter(q=>exist.has(key(q))).length;
+    openSheet(`<h3>Importar cuotas</h3><div class="sub">${nuevas.length} compras en cuotas de la app anterior, en ${new Set(nuevas.map(q=>q.tarjeta)).size} tarjetas.
+      ${rep?`<br>${rep} ya existen y se van a actualizar.`:""}<br>Tus gastos e ingresos no se tocan.</div>
+      <div class="btns"><button class="btn sec" id="impNo">Cancelar</button><button class="btn pri" id="impSi">Importar</button></div>`);
+    $("#impNo").onclick=closeSheet;
+    $("#impSi").onclick=()=>{ nuevas.forEach((q,ix)=>{ const id=exist.get(key(q))||("q-"+Date.now().toString(36)+ix); state.cuotas[id]=q; }); persist(); closeSheet(); renderAll(); toast("Cuotas importadas"); };
   }
   function openAjustes(){
     const n=state.items.length, m=Object.keys(state.movs).length;
     openSheet(`<h3>Datos y backup</h3>
-      <div class="sub">Tus datos viven solo en este celu (${n} ítems, ${m} importes). Exportá un backup cada tanto y guardalo en Drive o iCloud.</div>
+      <div class="sub">Tus datos viven solo en este celu (${n} ítems, ${m} importes, ${Object.keys(state.cuotas).length} compras en cuotas). Exportá un backup cada tanto y guardalo en Drive o iCloud.</div>
       <div class="btns" style="flex-direction:column">
         <button class="btn pri" id="bExp">Exportar backup</button>
         <button class="btn sec" id="bImp">Importar backup</button>
