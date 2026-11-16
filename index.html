@@ -49,7 +49,7 @@
   .mnav .ml b{display:block;font-family:"Bricolage Grotesque";font-size:24px;font-weight:700;letter-spacing:-.02em;text-transform:capitalize;line-height:1.1}
   .mnav .ml span{font-size:12.5px;color:var(--mut)}
   .mnav .ml button.hoy{display:inline;width:auto;height:auto;border:0;background:none;color:var(--lime);font:inherit;font-size:12.5px;padding:0;border-radius:0}
-  .gc .nm{white-space:normal;line-height:1.2}
+  .xc.gc .nm{white-space:normal;line-height:1.2}
   .gc .chev{width:18px;height:18px;stroke:var(--mut);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s;margin-left:2px;vertical-align:-3px}
   .gc.open .chev{transform:rotate(180deg)}
   .gc .track{display:flex;gap:2px;background:none}
@@ -249,11 +249,11 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.3.2";
+  const APP_VERSION="1.4.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
-  const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",otro:"🧾"};
+  const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",educacion:"🎓",impuesto:"🧾",persona:"👤",otro:"🧾"};
 
   const fmt = n => "$ " + (Math.round(n*100)/100).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const fmt0 = n => "$ " + Math.round(n).toLocaleString("es-AR");
@@ -395,7 +395,7 @@
       const isOpen=openGroups.has(g), pc = hasInc&&sum ? sum/inc.v*100 : null;
       const segs = gi.map(i=>{ const m=mov(i.id,ym); if(!m) return ""; const w = hasInc ? m.importe/inc.v*100 : m.importe/Math.max(sum,1)*100; return `<i style="width:${w}%;background:${color(i.id)}"></i>`; }).join("");
       html+=`<button class="xc gc ${isOpen?"open":""}" data-group="${esc(g)}">
-        <div class="ic" style="background:rgba(255,255,255,.07)">🏠</div>
+        <div class="ic" style="background:rgba(255,255,255,.07)">${/personal/i.test(g)?"👤":/depto|departamento|casa|propiedad|\d{3,}/i.test(g)?"🏠":"📁"}</div>
         <div style="min-width:0"><div class="nm">${esc(g)}</div>
           <div class="meta"><span>${cargados<gi.length?`${cargados}/${gi.length} cargados`:`${gi.length} gastos`}</span>${sum?`<span class="num money">${fmt0(sum)}</span>`:""}</div></div>
         <div class="pc">${pc!=null?`<div class="p disp">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
@@ -549,7 +549,7 @@
     const i=id?state.items.find(x=>x.id===id):null;
     let tipo=i?.tipo||tipoDef||"gasto";
     const groups=groupsOf(state.items);
-    const icons={luz:"Luz",gas:"Gas",agua:"Agua",internet:"Internet",expensas:"Expensas",tsu:"Impuesto/Tasa",celular:"Celular",ingreso:"Ingreso",otro:"Otro"};
+    const icons={luz:"Luz",gas:"Gas",agua:"Agua",internet:"Internet",expensas:"Expensas",tsu:"Tasa municipal",impuesto:"Impuesto",celular:"Celular",educacion:"Educación",ingreso:"Ingreso",otro:"Otro"};
     const defIco = i?.icono || (tipo==="ingreso"?"ingreso":"otro");
     openSheet(`
       <h3>${i?"Editar ítem":"Nuevo ítem"}</h3>
@@ -683,6 +683,7 @@
     const rd=new FileReader();
     rd.onload=()=>{ try{ const d=JSON.parse(rd.result);
         if(d.app==="MisGastos" && d.config && Array.isArray(d.config.cuotas)){ importarCuotasMisGastos(d); return; }
+        if(d.app==="mis-cuentas" && d.tipo==="cambios"){ importarCambios(d); return; }
         if(d.app!=="mis-cuentas"||!d.items||!d.movs) throw 0;
         const n=Object.keys(d.items).length, m=Object.keys(d.movs).length;
         openSheet(`<h3>Importar backup</h3><div class="sub">${n} ítems y ${m} importes${d.exportado?" · exportado el "+esc(d.exportado):""}.<br>Reemplaza todo lo que hay ahora en la app.</div>
@@ -693,6 +694,25 @@
     rd.readAsText(file);
   }
   // Backup de la app "MisGastos / Tu Contador": se suman solo las compras en cuotas
+  // Paquete de cambios: suma o actualiza ítems/importes/cuotas sin borrar nada
+  function importarCambios(d){
+    const its=d.items||{}, mv=d.movs||{}, cq=d.cuotas||{};
+    const lines=[];
+    Object.entries(its).forEach(([id,x])=>{ const cur=state.items.find(i=>i.id===id);
+      lines.push(cur ? `• ${esc(cur.nombre)}: ${Object.keys(x).map(k=>k==="grupo"?`pasa a "${esc(x.grupo)}"`:k==="nombre"?`se llama "${esc(x.nombre)}"`:"").filter(Boolean).join(", ")||"se actualiza"}` : `• Nuevo: ${esc(x.nombre)} (${esc(x.grupo)})`); });
+    if(Object.keys(mv).length) lines.push(`• ${Object.keys(mv).length} importes`);
+    if(Object.keys(cq).length) lines.push(`• ${Object.keys(cq).length} compras en cuotas`);
+    openSheet(`<h3>Aplicar cambios</h3><div class="sub">${d.descripcion?esc(d.descripcion)+"<br>":""}${lines.join("<br>")}<br><br>No se borra nada de lo que ya tenés.</div>
+      <div class="btns"><button class="btn sec" id="impNo">Cancelar</button><button class="btn pri" id="impSi">Aplicar</button></div>`);
+    $("#impNo").onclick=closeSheet;
+    $("#impSi").onclick=()=>{
+      const maxOrd=state.items.reduce((a,x)=>Math.max(a,x.orden||0),0); let k=0;
+      Object.entries(its).forEach(([id,x])=>{ const ix=state.items.findIndex(i=>i.id===id);
+        if(ix>=0) state.items[ix]={...state.items[ix],...x};
+        else state.items.push({id,tipo:"gasto",icono:"otro",venc:null,activo:true,orden:maxOrd+(++k),...x}); });
+      Object.assign(state.movs,mv); Object.assign(state.cuotas,cq);
+      persist(); closeSheet(); renderAll(); toast("Cambios aplicados"); };
+  }
   function importarCuotasMisGastos(d){
     const nuevas=d.config.cuotas.filter(q=>q&&q.n&&q.m>0&&q.t>0).map(q=>({nombre:String(q.n).trim(),tarjeta:String(q.f||"Sin tarjeta").trim(),monto:Number(q.m),t:Number(q.t),
       primera: ymAdd(/^\d{4}-\d{2}$/.test(q.d)?q.d:ymNow(), -((Number(q.c)||1)-1))}));
