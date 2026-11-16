@@ -56,6 +56,13 @@
   .gc .track i{border-radius:0}
   .gc .track i:first-child{border-radius:99px 0 0 99px}
   .gc .track i:last-child{border-radius:0 99px 99px 0}
+  .mlist{display:grid;gap:6px;margin:4px 0 6px}
+  .mrow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;background:rgba(255,255,255,.04);border:1px solid var(--edge);border-radius:14px;padding:10px 10px 10px 14px}
+  .mrow b{display:block;font-weight:600} .mrow span{font-size:12px;color:var(--mut)}
+  .mx{background:none;border:0;color:var(--mut);font:inherit;font-size:14px;padding:6px 8px;border-radius:10px;cursor:pointer}
+  .mx.sure{color:var(--coral);background:rgba(255,122,92,.12);font-size:12.5px}
+  .mtot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:8px 4px 0;font-size:14px;color:var(--mut)}
+  .mtot b{color:var(--ink);font-size:17px} .mtot em{font-style:normal;color:var(--lime);font-size:13px}
   .ficon{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
   .xc .ic,.row .ic{overflow:hidden}
   .inc-ic{width:30px;height:30px;border-radius:9px;overflow:hidden;display:grid;place-items:center;flex:none}
@@ -254,11 +261,11 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.5.0";
+  const APP_VERSION="1.6.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
-  const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",educacion:"🎓",impuesto:"🧾",persona:"👤",otro:"🧾"};
+  const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",educacion:"🎓",impuesto:"🧾",persona:"👤",deporte:"🎾",futbol:"⚽",torneo:"🏆",otro:"🧾"};
   // Fotos propias (ítems, tarjetas y grupos): guardadas en el celu como imagen chiquita
   const foto = k => state.fotos[k];
   const imgTag = src => `<img class="ficon" src="${src}" alt="">`;
@@ -387,7 +394,8 @@
       const m=mov(i.id,ym), col=color(i.id), lk=m?null:lastKnown(i.id,ym);
       const pc = m&&hasInc ? m.importe/inc.v*100 : null;
       const tag = m ? "" : `<span class="tag none">Sin cargar</span>`;
-      const amt = m ? `<span class="num money">${fmt(m.importe)}</span>` : (lk?`últ. <span class="num money">${fmt0(lk.importe)}</span>`:"");
+      const nE = m&&Array.isArray(m.entradas) ? m.entradas.length : 0;
+      const amt = m ? `${i.multi?`<span>${nE} ${esc((i.unidad||"carga").toLowerCase())}${nE===1?"":"s"}</span>`:""}<span class="num money">${fmt(m.importe)}</span>` : (lk?`últ. <span class="num money">${fmt0(lk.importe)}</span>`:"");
       const right = m ? (pc!=null? `<div class="p disp" style="color:${col}">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso</div>`
                                   : `<div class="p disp muted" style="font-size:18px">s/ingreso</div>`)
                       : `<div class="p disp muted">—</div>`;
@@ -457,7 +465,44 @@
   function closeSheet(){ $("#scrim").classList.remove("on"); $("#sheet").classList.remove("on"); }
   $("#scrim").addEventListener("click",closeSheet);
 
+  // Ítems con varias cargas por mes (ej. Newbery: Partido 1, Partido 2, ...)
+  function openMulti(itemId){
+    const i=state.items.find(x=>x.id===itemId); if(!i) return;
+    const ym=state.mes, path=`${state.base}/movs/${itemId}__${ym}`, U=i.unidad||"Carga";
+    const m=mov(itemId,ym), ent=(m&&Array.isArray(m.entradas))?m.entradas.slice():[];
+    const inc=income(ym), tot=ent.reduce((s,e)=>s+(e.importe||0),0);
+    const today=new Date(), todayYm=ymNow(), defDate = ym===todayYm ? today.toISOString().slice(0,10) : ym+"-01";
+    const last = ent.length ? ent[ent.length-1].importe : (lastKnown(itemId,ym)?.entradas||[]).slice(-1)[0]?.importe;
+    openSheet(`
+      <h3>${esc(i.nombre)}</h3>
+      <div class="sub">${esc(i.grupo)} · ${ymLabel(ym)}</div>
+      <div class="mlist">${ent.length?ent.map((e,k)=>`<div class="mrow"><div><b>${esc(U)} ${k+1}</b><span>${e.fecha?e.fecha.slice(8,10)+"/"+e.fecha.slice(5,7):""}${e.nota?" · "+esc(e.nota):""}</span></div>
+          <div class="num money">${fmt(e.importe)}</div><button class="mx" data-del="${k}" aria-label="Borrar">✕</button></div>`).join("")
+        :`<div class="muted" style="font-size:14px;padding:8px 2px">Todavía no cargaste ningún ${esc(U.toLowerCase())} este mes.</div>`}</div>
+      ${ent.length?`<div class="mtot"><span>Total del mes</span><b class="num money">${fmt(tot)}</b>${inc.v>0?`<em>${pctTxt(tot/inc.v*100)}% del ingreso</em>`:""}</div>`:""}
+      <label class="f">${esc(U)} ${ent.length+1}</label>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px">
+        <input class="in amt" id="eAmt" inputmode="decimal" placeholder="0,00" style="font-size:22px">
+        <input class="in" id="eFec" type="date" value="${defDate}">
+      </div>
+      ${last?`<div class="quick"><button id="eLast">Igual que el anterior: ${fmt(last)}</button></div>`:""}
+      <div class="btns"><button class="btn sec" id="eOk">Listo</button><button class="btn pri" id="eAdd">＋ Agregar ${esc(U.toLowerCase())}</button></div>`);
+    const save=async list=>{
+      if(!list.length){ await state.db.doc(path).delete(); return; }
+      await state.db.doc(path).set({item:itemId, mes:ym, importe:Math.round(list.reduce((s,e)=>s+e.importe,0)*100)/100, entradas:list, nota:"", upd:new Date().toISOString()});
+    };
+    $("#eLast")?.addEventListener("click",()=>{ $("#eAmt").value=String(last).replace(".",","); });
+    $("#eOk").onclick=closeSheet;
+    $("#eAdd").onclick=async()=>{ const v=parseAmt($("#eAmt").value);
+      if(!isFinite(v)||v<=0){ $("#eAmt").style.outline="2px solid var(--coral)"; return; }
+      ent.push({importe:Math.round(v*100)/100, fecha:$("#eFec").value||""}); await save(ent); toast(`${U} ${ent.length} cargado`); openMulti(itemId); };
+    document.querySelectorAll(".mx").forEach(b=>b.onclick=async()=>{ const k=+b.dataset.del;
+      if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="¿Borrar?"; b.classList.add("sure"); return; }
+      ent.splice(k,1); await save(ent); openMulti(itemId); });
+    setTimeout(()=>{ try{$("#eAmt").focus();}catch(e){} },280);
+  }
   function openMov(itemId){
+    if(state.items.find(x=>x.id===itemId)?.multi) return openMulti(itemId);
     const i=state.items.find(x=>x.id===itemId); if(!i) return;
     const ym=state.mes, m=mov(itemId,ym), lk=lastKnown(itemId,ym), isIng=i.tipo==="ingreso";
     const inc = income(ym);
@@ -560,7 +605,7 @@
     const i=id?state.items.find(x=>x.id===id):null;
     let tipo=i?.tipo||tipoDef||"gasto";
     const groups=groupsOf(state.items);
-    const icons={luz:"Luz",gas:"Gas",agua:"Agua",internet:"Internet",expensas:"Expensas",tsu:"Tasa municipal",impuesto:"Impuesto",celular:"Celular",educacion:"Educación",ingreso:"Ingreso",otro:"Otro"};
+    const icons={luz:"Luz",gas:"Gas",agua:"Agua",internet:"Internet",expensas:"Expensas",tsu:"Tasa municipal",impuesto:"Impuesto",celular:"Celular",educacion:"Educación",deporte:"Deporte / raqueta",futbol:"Fútbol",torneo:"Torneo",ingreso:"Ingreso",otro:"Otro"};
     const defIco = i?.icono || (tipo==="ingreso"?"ingreso":"otro");
     openSheet(`
       <h3>${i?"Editar ítem":"Nuevo ítem"}</h3>
@@ -572,9 +617,12 @@
       <label class="f">Ícono</label><select class="in" id="iIco">${Object.entries(icons).map(([k,v])=>`<option value="${k}" ${defIco===k?"selected":""}>${ICON[k]} ${v}</option>`).join("")}</select>
       ${i?`<button class="fotobtn" id="iFoto">📷 ${foto("item:"+i.id)?"Cambiar la foto":"Usar una foto en vez del ícono"}</button>`:""}
       <label class="f">Día de vencimiento (opcional)</label><input class="in" id="iVen" inputmode="numeric" maxlength="2" placeholder="Ej: 10" value="${i?.venc||""}">
+      <div class="toggle ${i?.multi?"on":""}" id="iMul"><span>Varias cargas por mes<br><small class="muted">Ej: partidos, salidas, nafta</small></span><div class="sw"></div></div>
+      <div id="iUniBox" style="${i?.multi?"":"display:none"}"><label class="f">Cómo se llama cada carga</label><input class="in" id="iUni" maxlength="20" placeholder="Partido" value="${esc(i?.unidad||"")}"></div>
       ${i?`<div class="toggle ${i.activo===false?"":"on"}" id="iAct"><span>Activo</span><div class="sw"></div></div>`:""}
       <div class="btns"><button class="btn sec" id="iCancel">Cancelar</button><button class="btn pri" id="iSave">Guardar</button></div>`);
-    let activo=i?i.activo!==false:true;
+    let activo=i?i.activo!==false:true, multi=!!i?.multi;
+    $("#iMul").addEventListener("click",e=>{ multi=!multi; e.currentTarget.classList.toggle("on",multi); $("#iUniBox").style.display=multi?"":"none"; });
     $("#fTipo").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; tipo=b.dataset.t; [...$("#fTipo").children].forEach(x=>x.classList.toggle("on",x===b)); });
     $("#iAct")?.addEventListener("click",e=>{ activo=!activo; e.currentTarget.classList.toggle("on",activo); });
     $("#iCancel").addEventListener("click",closeSheet);
@@ -585,7 +633,8 @@
       const venc=parseInt($("#iVen").value,10);
       const nid=i?.id||("it-"+Date.now().toString(36));
       const maxOrd=state.items.reduce((a,x)=>Math.max(a,x.orden||0),0);
-      const data={nombre,grupo,tipo,icono:$("#iIco").value,venc:(venc>=1&&venc<=31)?venc:null,activo,orden:i?.orden??maxOrd+1};
+      const data={...(i?Object.fromEntries(Object.entries(i).filter(([k])=>k!=="id")):{}),nombre,grupo,tipo,icono:$("#iIco").value,venc:(venc>=1&&venc<=31)?venc:null,activo,orden:i?.orden??maxOrd+1,multi,unidad:multi?($("#iUni").value.trim()||"Partido"):undefined};
+      if(!multi) delete data.unidad;
       e.currentTarget.disabled=true;
       try{ await state.db.doc(`${state.base}/items/${nid}`).set(data); closeSheet(); toast(i?"Ítem actualizado":"Ítem creado"); }
       catch(err){ e.currentTarget.disabled=false; dbFail(err); }
