@@ -80,10 +80,12 @@
   .ring .pct{font-size:34px;font-weight:800;line-height:1}
   .ring .pct small{font-size:18px}
   .ring .cap{font-size:11px;color:var(--mut);margin-top:4px;line-height:1.2}
-  .kv{flex:1;min-width:0;display:grid;gap:10px}
+  .kv{flex:1;min-width:0;display:grid;gap:8px}
   .kv .l{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
-  .kv .v{font-size:19px;font-weight:700}
+  .kv .v{font-size:18px;font-weight:700;white-space:nowrap}
   .kv .v.lime{color:var(--lime)} .kv .v.coral{color:var(--coral)}
+  .kv .v.red{color:#ff5c5c} .kv .v.green{color:#3ee08f}
+  .kv .tq{border-top:1px solid var(--edge);padding-top:8px}
   .strip{display:flex;height:14px;border-radius:99px;overflow:hidden;margin-top:18px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.06) 0 6px,transparent 6px 12px);gap:2px}
   .strip i{display:block;height:100%;transition:flex-basis .4s}
   .strip-cap{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:8px}
@@ -247,7 +249,7 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.3.1";
+  const APP_VERSION="1.3.2";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
@@ -347,8 +349,9 @@
         <div class="cap">${p==null?"cargá tu<br>ingreso":"del ingreso<br>en gastos"}</div></div></div>
       <div class="kv">
         <div><div class="l">Ingreso${inc.est?" (estimado)":""}</div><div class="v num money lime">${hasInc?fmt0(inc.v):"—"}</div></div>
-        <div><div class="l">Gastos${s.c<s.n?` · ${s.c}/${s.n} cargados`:""}</div><div class="v num money">${fmt0(s.g)}</div></div>
-        <div><div class="l">Te queda</div><div class="v num money ${hasInc&&inc.v-s.g<0?"coral":""}">${hasInc?fmt0(inc.v-s.g):"—"}</div></div>
+        <div><div class="l">Gastos${s.c<s.n?` · ${s.c}/${s.n} cargados`:""}</div><div class="v num money red">${s.g-s.cuotas>0?"− "+fmt0(s.g-s.cuotas):fmt0(0)}</div></div>
+        <div><div class="l">Cuotas</div><div class="v num money red">${s.cuotas>0?"− "+fmt0(s.cuotas):fmt0(0)}</div></div>
+        <div class="tq"><div class="l">Te queda</div><div class="v num money ${hasInc&&inc.v-s.g<0?"red":"green"}">${hasInc?(inc.v-s.g<0?"− "+fmt0(s.g-inc.v):fmt0(inc.v-s.g)):"—"}</div></div>
       </div></div>`;
     if(hasInc){
       const segs = seriesList().map(se=>{ const v=se.val(ym); return v? `<i style="flex:0 0 ${Math.max(0,(v/Math.max(inc.v,s.g))*100)}%;background:${se.color}"></i>`:""; }).join("");
