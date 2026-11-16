@@ -56,6 +56,11 @@
   .gc .track i{border-radius:0}
   .gc .track i:first-child{border-radius:99px 0 0 99px}
   .gc .track i:last-child{border-radius:0 99px 99px 0}
+  .ficon{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+  .xc .ic,.row .ic{overflow:hidden}
+  .inc-ic{width:30px;height:30px;border-radius:9px;overflow:hidden;display:grid;place-items:center;flex:none}
+  .fprev{width:96px;height:96px;border-radius:24px;overflow:hidden;background:var(--glass2);display:grid;place-items:center;font-size:40px;margin:6px auto 4px;border:1px solid var(--edge)}
+  .fotobtn{background:none;border:1px dashed var(--edge);color:var(--ink);border-radius:14px;padding:11px;width:100%;font:inherit;font-size:14px;margin-top:10px;cursor:pointer}
   .badge{border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
   .badge b{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;line-height:1;letter-spacing:-.02em}
   .badge i{font-style:normal;font-size:7.5px;font-weight:700;letter-spacing:.06em;margin-top:2px;opacity:.9}
@@ -249,11 +254,16 @@
 <script>
 (() => {
   "use strict";
-  const APP_VERSION="1.4.0";
+  const APP_VERSION="1.5.0";
   const $ = s => document.querySelector(s);
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const PAL = ["#c8f25c","#7c5cff","#ff7a5c","#4dd6ff","#ffc24d","#ff5ca8","#5cffb0","#b38bff","#ffa45c"];
   const ICON = {luz:"💡",gas:"🔥",agua:"💧",internet:"📶",expensas:"🏢",tsu:"🏛️",celular:"📱",ingreso:"💰",educacion:"🎓",impuesto:"🧾",persona:"👤",otro:"🧾"};
+  // Fotos propias (ítems, tarjetas y grupos): guardadas en el celu como imagen chiquita
+  const foto = k => state.fotos[k];
+  const imgTag = src => `<img class="ficon" src="${src}" alt="">`;
+  const itemIcon = (i, def) => foto("item:"+i.id) ? imgTag(foto("item:"+i.id)) : (ICON[i.icono]||def||ICON.otro);
+  const groupIcon = g => foto("group:"+g) ? imgTag(foto("group:"+g)) : (/personal/i.test(g)?"👤":/depto|departamento|casa|propiedad|\d{3,}/i.test(g)?"🏠":"📁");
 
   const fmt = n => "$ " + (Math.round(n*100)/100).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const fmt0 = n => "$ " + Math.round(n).toLocaleString("es-AR");
@@ -268,7 +278,7 @@
     return Number(s); };
   const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-  const state = { mes: ymNow(), items: [], movs: {}, cuotas: {}, ready:false, db:null, base:null };
+  const state = { mes: ymNow(), items: [], movs: {}, cuotas: {}, fotos: {}, ready:false, db:null, base:null };
   let openGroups=new Set(); try{ openGroups=new Set(JSON.parse(localStorage.getItem("mc.open")||"[]")); }catch(e){}
   let hide=false; try{ hide = localStorage.getItem("mc.hide")==="1"; }catch(e){}
   const applyHide = () => document.body.classList.toggle("hide", hide);
@@ -314,6 +324,7 @@
     const b=BANKS.find(([re])=>re.test(t)); const net=(NETS.find(([re])=>re.test(t))||[,""])[1];
     const bg=b?b[1]:cardColor(t), ini=b?b[2]:(t.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase()||"?");
     const s=size||42;
+    if(foto("card:"+t)) return `<div class="badge" style="width:${s}px;height:${s}px;background:#fff;overflow:hidden">${imgTag(foto("card:"+t))}</div>`;
     return `<div class="badge" style="width:${s}px;height:${s}px;background:linear-gradient(145deg,${bg},${bg}cc)"><b style="font-size:${ini.length>1?s*.32:s*.42}px">${esc(ini)}</b>${net?`<i>${net}</i>`:""}</div>`;
   }
   const cardColor = t => CARDPAL[Math.max(0,tarjetas().indexOf(t)) % CARDPAL.length];
@@ -365,7 +376,7 @@
 
     // ingresos
     $("#incomeBox").innerHTML = ingresos().length ? `<div class="sec"><h2>Ingresos</h2><span></span></div>` + ingresos().map(i=>{
-      const m=mov(i.id,ym); return `<button class="inc" data-item="${esc(i.id)}"><span>${ICON[i.icono]||ICON.ingreso}</span><span class="nm">${esc(i.nombre)}</span>
+      const m=mov(i.id,ym); return `<button class="inc" data-item="${esc(i.id)}"><span class="inc-ic">${itemIcon(i,ICON.ingreso)}</span><span class="nm">${esc(i.nombre)}</span>
         <span class="v num money">${m?fmt0(m.importe):"<span class='muted' style='font-weight:500'>Cargar</span>"}</span></button>`; }).join("") : "";
 
     // gastos por grupo
@@ -382,7 +393,7 @@
                       : `<div class="p disp muted">—</div>`;
       const w = m ? (hasInc ? Math.min(100,pc) : m.importe/maxP*100) : 0;
       return `<button class="xc ${m?"":"empty-it"}" data-item="${esc(i.id)}">
-        <div class="ic" style="background:${col}1f">${ICON[i.icono]||ICON.otro}</div>
+        <div class="ic" style="background:${col}1f">${itemIcon(i)}</div>
         <div style="min-width:0"><div class="nm">${esc(i.nombre)}</div><div class="meta">${tag}${amt}</div></div>
         <div class="pc">${right}</div>
         <div class="track"><i style="width:${w}%;background:${col}"></i></div></button>`;
@@ -395,7 +406,7 @@
       const isOpen=openGroups.has(g), pc = hasInc&&sum ? sum/inc.v*100 : null;
       const segs = gi.map(i=>{ const m=mov(i.id,ym); if(!m) return ""; const w = hasInc ? m.importe/inc.v*100 : m.importe/Math.max(sum,1)*100; return `<i style="width:${w}%;background:${color(i.id)}"></i>`; }).join("");
       html+=`<button class="xc gc ${isOpen?"open":""}" data-group="${esc(g)}">
-        <div class="ic" style="background:rgba(255,255,255,.07)">${/personal/i.test(g)?"👤":/depto|departamento|casa|propiedad|\d{3,}/i.test(g)?"🏠":"📁"}</div>
+        <div class="ic" style="background:rgba(255,255,255,.07)">${groupIcon(g)}</div>
         <div style="min-width:0"><div class="nm">${esc(g)}</div>
           <div class="meta"><span>${cargados<gi.length?`${cargados}/${gi.length} cargados`:`${gi.length} gastos`}</span>${sum?`<span class="num money">${fmt0(sum)}</span>`:""}</div></div>
         <div class="pc">${pc!=null?`<div class="p disp">${pctTxt(pc)}<small>%</small></div><div class="s">del ingreso <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>`
@@ -487,7 +498,7 @@
     let h="";
     tarjetas().forEach(t=>{
       const qs=all.filter(q=>q.tarjeta===t).sort((a,b)=>cuotaFin(b).localeCompare(cuotaFin(a)));
-      h+=`<div class="gh" style="display:flex;align-items:center;gap:10px">${cardBadge(t,28)}<span>${esc(t)}</span></div>`;
+      h+=`<button class="gh" data-cardfoto="${esc(t)}" style="align-items:center;gap:10px;justify-content:flex-start">${cardBadge(t,28)}<span style="color:var(--mut);text-transform:uppercase;letter-spacing:.08em">${esc(t)}</span><span style="margin-left:auto">Foto ›</span></button>`;
       qs.forEach(q=>{ const fin=cuotaFin(q), done=fin<now, notyet=q.primera>now;
         h+=`<button class="row" data-cuota="${esc(q.id)}" style="${done?"opacity:.45":""}">
           <div class="ic" style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace">${q.t}x</div>
@@ -540,7 +551,7 @@
     groupsOf(ord).forEach(g=>{
       h+=`<button class="gh" data-rengroup="${esc(g)}">${esc(g)}<span>Renombrar ›</span></button>`;
       ord.filter(i=>i.grupo===g).forEach(i=>{ h+=`<button class="row" data-edit="${esc(i.id)}" style="${i.activo===false?"opacity:.45":""}">
-        <div class="ic">${ICON[i.icono]||ICON.otro}</div><div class="t"><div class="n">${esc(i.nombre)}</div>
+        <div class="ic">${itemIcon(i)}</div><div class="t"><div class="n">${esc(i.nombre)}</div>
         <div class="s">${i.tipo==="ingreso"?"Ingreso":"Gasto"}${i.venc?" · vence día "+i.venc:""}${i.activo===false?" · archivado":""}</div></div><div class="muted">›</div></button>`; });
     });
     $("#itemsList").innerHTML=h;
@@ -559,6 +570,7 @@
       <label class="f">Grupo</label><input class="in" id="iGru" maxlength="40" list="glist" placeholder="Ej: Yrigoyen 3347" value="${esc(i?.grupo||(tipo==="ingreso"?"Ingresos":""))}">
       <datalist id="glist">${groups.map(g=>`<option value="${esc(g)}">`).join("")}</datalist>
       <label class="f">Ícono</label><select class="in" id="iIco">${Object.entries(icons).map(([k,v])=>`<option value="${k}" ${defIco===k?"selected":""}>${ICON[k]} ${v}</option>`).join("")}</select>
+      ${i?`<button class="fotobtn" id="iFoto">📷 ${foto("item:"+i.id)?"Cambiar la foto":"Usar una foto en vez del ícono"}</button>`:""}
       <label class="f">Día de vencimiento (opcional)</label><input class="in" id="iVen" inputmode="numeric" maxlength="2" placeholder="Ej: 10" value="${i?.venc||""}">
       ${i?`<div class="toggle ${i.activo===false?"":"on"}" id="iAct"><span>Activo</span><div class="sw"></div></div>`:""}
       <div class="btns"><button class="btn sec" id="iCancel">Cancelar</button><button class="btn pri" id="iSave">Guardar</button></div>`);
@@ -566,6 +578,7 @@
     $("#fTipo").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; tipo=b.dataset.t; [...$("#fTipo").children].forEach(x=>x.classList.toggle("on",x===b)); });
     $("#iAct")?.addEventListener("click",e=>{ activo=!activo; e.currentTarget.classList.toggle("on",activo); });
     $("#iCancel").addEventListener("click",closeSheet);
+    $("#iFoto")?.addEventListener("click",()=>pickPhoto("item:"+i.id, i.nombre, ICON[i.icono]||ICON.otro, ()=>openItem(id)));
     $("#iSave").addEventListener("click",async e=>{
       const nombre=$("#iNom").value.trim(), grupo=$("#iGru").value.trim()||(tipo==="ingreso"?"Ingresos":"General");
       if(!nombre){ $("#iNom").style.outline="2px solid var(--coral)"; return; }
@@ -639,19 +652,42 @@
   $("#itemsList").addEventListener("click",e=>{
     const r=e.target.closest("[data-rengroup]"); if(r){ renameGroup(r.dataset.rengroup); return; }
     const b=e.target.closest("[data-edit]"); if(b&&state.db) openItem(b.dataset.edit); });
+  function resizeImg(file){ return new Promise((ok,ko)=>{ const u=URL.createObjectURL(file), im=new Image();
+    im.onload=()=>{ const S=128, c=document.createElement("canvas"); c.width=c.height=S; const x=c.getContext("2d");
+      x.fillStyle="#fff"; x.fillRect(0,0,S,S); const s=Math.min(im.width,im.height);
+      x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S,S); URL.revokeObjectURL(u); ok(c.toDataURL("image/jpeg",.86)); };
+    im.onerror=()=>{ URL.revokeObjectURL(u); ko(); }; im.src=u; }); }
+  function pickPhoto(key, titulo, fallback, back){
+    const cur=foto(key);
+    openSheet(`<h3>Foto</h3><div class="sub">${esc(titulo)} · se recorta en cuadrado desde el centro.</div>
+      <div class="fprev" id="fpv">${cur?imgTag(cur):fallback}</div>
+      <input type="file" id="fpFile" accept="image/*" style="display:none">
+      <div class="btns" style="flex-direction:column"><button class="btn pri" id="fpPick">${cur?"Cambiar foto":"Elegir foto"}</button>
+      ${cur?`<button class="btn dan" id="fpDel">Quitar foto</button>`:""}<button class="btn sec" id="fpOk">Listo</button></div>`);
+    $("#fpPick").onclick=()=>$("#fpFile").click();
+    $("#fpFile").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+      try{ state.fotos[key]=await resizeImg(f); if(persist()){ renderAll(); pickPhoto(key,titulo,fallback,back); toast("Foto guardada"); } }catch(_){ toast("No se pudo leer esa imagen"); } };
+    $("#fpDel")?.addEventListener("click",()=>{ delete state.fotos[key]; persist(); renderAll(); pickPhoto(key,titulo,fallback,back); });
+    $("#fpOk").onclick=()=>{ back?back():closeSheet(); };
+  }
   function renameGroup(g){
     openSheet(`<h3>Renombrar grupo</h3><div class="sub">Cambia el nombre en todos los ítems de "${esc(g)}".</div>
       <label class="f">Nombre del grupo</label><input class="in" id="gNom" maxlength="40" value="${esc(g)}">
+      <button class="fotobtn" id="gFoto">📷 ${foto("group:"+g)?"Cambiar la foto del grupo":"Poner una foto al grupo"}</button>
       <div class="btns"><button class="btn sec" id="gNo">Cancelar</button><button class="btn pri" id="gSi">Guardar</button></div>`);
     $("#gNo").onclick=closeSheet;
+    $("#gFoto").onclick=()=>pickPhoto("group:"+g, g, groupIcon(g), ()=>renameGroup(g));
     $("#gSi").onclick=()=>{ const n=$("#gNom").value.trim(); if(!n||n===g){ closeSheet(); return; }
       state.items=state.items.map(i=>i.grupo===g?{...i,grupo:n}:i);
+      if(state.fotos["group:"+g]){ state.fotos["group:"+n]=state.fotos["group:"+g]; delete state.fotos["group:"+g]; }
       if(openGroups.has(g)){ openGroups.delete(g); openGroups.add(n); try{localStorage.setItem("mc.open",JSON.stringify([...openGroups]));}catch(_){} }
       persist(); closeSheet(); renderAll(); toast("Grupo renombrado"); };
   }
   $("#addItem").addEventListener("click",()=>{ if(state.db) openItem(null); });
   $("#addCuota").addEventListener("click",()=>openCuota(null));
-  $("#cuotasList").addEventListener("click",e=>{ const b=e.target.closest("[data-cuota]"); if(b) openCuota(b.dataset.cuota); });
+  $("#cuotasList").addEventListener("click",e=>{
+    const cf=e.target.closest("[data-cardfoto]"); if(cf){ const t=cf.dataset.cardfoto; pickPhoto("card:"+t, t, cardBadge(t,96)); return; }
+    const b=e.target.closest("[data-cuota]"); if(b) openCuota(b.dataset.cuota); });
   $("#eye").addEventListener("click",()=>{ hide=!hide; applyHide(); try{localStorage.setItem("mc.hide",hide?"1":"0");}catch(e){} });
   document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>{
     document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("on",x===b));
@@ -663,8 +699,8 @@
 
   // ---------- almacenamiento local (todo vive en este celu) ----------
   const KEY="misCuentas.v1";
-  function persist(){ try{ localStorage.setItem(KEY, JSON.stringify({items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])), movs:state.movs, cuotas:state.cuotas})); return true; }catch(e){ toast("No se pudo guardar en el celu"); return false; } }
-  function loadAll(){ try{ const r=JSON.parse(localStorage.getItem(KEY)||"null"); if(r){ state.items=Object.entries(r.items||{}).map(([id,d])=>({id,...d})); state.movs=r.movs||{}; state.cuotas=r.cuotas||{}; } }catch(e){ banner("No se pudieron leer los datos guardados."); } }
+  function persist(){ try{ localStorage.setItem(KEY, JSON.stringify({items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])), movs:state.movs, cuotas:state.cuotas, fotos:state.fotos})); return true; }catch(e){ toast("No se pudo guardar en el celu"); return false; } }
+  function loadAll(){ try{ const r=JSON.parse(localStorage.getItem(KEY)||"null"); if(r){ state.items=Object.entries(r.items||{}).map(([id,d])=>({id,...d})); state.movs=r.movs||{}; state.cuotas=r.cuotas||{}; state.fotos=r.fotos||{}; } }catch(e){ banner("No se pudieron leer los datos guardados."); } }
   // misma interfaz que usan los paneles de carga: doc(".../items/id" | ".../movs/id").set/delete
   state.base="local";
   state.db={ doc:path=>{ const [col,id]=path.split("/").slice(-2);
@@ -673,7 +709,7 @@
 
   // ---------- backup ----------
   function exportar(){
-    const data={app:"mis-cuentas",version:1,exportado:new Date().toISOString().slice(0,10),items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])),movs:state.movs,cuotas:state.cuotas};
+    const data={app:"mis-cuentas",version:1,exportado:new Date().toISOString().slice(0,10),items:Object.fromEntries(state.items.map(({id,...d})=>[id,d])),movs:state.movs,cuotas:state.cuotas,fotos:state.fotos};
     const blob=new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
     const f=new File([blob],`mis-cuentas-backup-${data.exportado}.json`,{type:"application/json"});
     if(navigator.canShare && navigator.canShare({files:[f]})){ navigator.share({files:[f],title:"Backup Mis Cuentas"}).catch(()=>{}); return; }
@@ -689,7 +725,7 @@
         openSheet(`<h3>Importar backup</h3><div class="sub">${n} ítems y ${m} importes${d.exportado?" · exportado el "+esc(d.exportado):""}.<br>Reemplaza todo lo que hay ahora en la app.</div>
           <div class="btns"><button class="btn sec" id="impNo">Cancelar</button><button class="btn pri" id="impSi">Importar</button></div>`);
         $("#impNo").onclick=closeSheet;
-        $("#impSi").onclick=()=>{ state.items=Object.entries(d.items).map(([id,x])=>({id,...x})); state.movs=d.movs; state.cuotas=d.cuotas||{}; persist(); closeSheet(); renderAll(); toast("Backup importado"); };
+        $("#impSi").onclick=()=>{ state.items=Object.entries(d.items).map(([id,x])=>({id,...x})); state.movs=d.movs; state.cuotas=d.cuotas||{}; state.fotos=d.fotos||{}; persist(); closeSheet(); renderAll(); toast("Backup importado"); };
       }catch(e){ toast("Ese archivo no es un backup de Mis Cuentas"); } };
     rd.readAsText(file);
   }
@@ -710,7 +746,7 @@
       Object.entries(its).forEach(([id,x])=>{ const ix=state.items.findIndex(i=>i.id===id);
         if(ix>=0) state.items[ix]={...state.items[ix],...x};
         else state.items.push({id,tipo:"gasto",icono:"otro",venc:null,activo:true,orden:maxOrd+(++k),...x}); });
-      Object.assign(state.movs,mv); Object.assign(state.cuotas,cq);
+      Object.assign(state.movs,mv); Object.assign(state.cuotas,cq); Object.assign(state.fotos,d.fotos||{});
       persist(); closeSheet(); renderAll(); toast("Cambios aplicados"); };
   }
   function importarCuotasMisGastos(d){
